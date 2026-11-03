@@ -17,13 +17,14 @@ the result with the original until it matches. These tools do each part.
 
 1. `site_read` with the url. It opens the page in Chrome, scrolls it like a person, and measures everything. It
    returns the stack, the tokens, the sections and a screenshot of every section, and writes
-   `site-prompts/<site>/` (PROMPT.md, spec.json, page.html, css/, shots/).
+   `~/Documents/Site Prompts/<site>/` (PROMPT.md, exact.html, spec.json, css/, shots/).
 2. Look at every section screenshot (and `shots/phone-full.jpg`). Then `site_prompt` with `notes` per section
    number and an `overall` paragraph: only what the eye sees that the numbers miss (what the imagery shows, depth and
    layering, glow, texture, illustration style, density). Factual; never invent copy, features or numbers.
-3. Tell the person in a few short lines: what it was built with (say plainly when the stack is a guess or a site
-   builder), what the prompt covers, and how to use it: open `site-prompts/<site>/` in Claude Code, Codex or Cursor
-   and say "Build PROMPT.md", or paste PROMPT.md into any builder with the shots attached.
+3. site_prompt returns the finished prompt, copies it to the clipboard and links the file. Show the person the
+   whole prompt in the chat in one markdown code block, exactly as returned, then the clickable link to the .md file,
+   then in one line what the site was built with (say plainly when the stack is a guess or a site builder) and how
+   to use it.
 
 If they ask you to build it too: build from PROMPT.md section by section, run it locally, then `site_compare` with
 the original and the local url. Fix the first failing band from the top, compare again, up to five rounds.

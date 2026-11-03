@@ -3,6 +3,7 @@
 // the live page in Chrome, and a check that the rebuild matches. An MCP server over stdio; plain Node ≥ 22, nothing to install.
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { clone } from './component.mjs';
@@ -13,7 +14,8 @@ import { read } from './read.mjs';
 import { buildStack } from './stack.mjs';
 
 const VERSION = '0.1.0';
-const base = () => process.env.SITE_PROMPT_OUT || process.cwd();
+// everything lands in the person's Documents, one folder per site (the prompt with its reference files beside it)
+const base = () => process.env.SITE_PROMPT_OUT || path.join(os.homedir(), 'Documents', 'Site Prompts');
 const slug = (u) => {
 	const x = new URL(u);
 	return (x.host + x.pathname).replace(/^www\./, '').replace(/\/+$/, '').replace(/[^\w.-]+/g, '-').slice(0, 80) || 'site';
@@ -24,15 +26,16 @@ const urlOf = (u) => {
 	if (!/^[a-z]+:\/\//i.test(s)) s = 'https://' + s;
 	try { return new URL(s).href; } catch { throw new ToolError(`url: "${u}" is not a web address`); }
 };
-const dirFor = (u, sub = '') => path.join(base(), 'site-prompts', slug(u) + sub);
-const rel = (p) => path.relative(base(), p) || '.';
+const dirFor = (u, sub = '') => path.join(base(), slug(u) + sub);
+const rel = (p) => p.replace(os.homedir(), '~');
+const link = (p) => pathToFileURL(p).href;
 
 const INSTRUCTIONS = `site-prompt turns a website into a build prompt that rebuilds it 1:1. Whole page: site_read (measures and photographs it), look at every section shot, then site_prompt with a visual note per section (what only eyes can tell: imagery, depth, the feel) to finish PROMPT.md. One part of a page: site_component (the person clicks it in a Chrome window, or you pass a selector). After a rebuild: site_compare against the original. Only the sites the person names.`;
 
 const tools = [
 	{
 		name: 'site_read',
-		description: 'Read a website so it can be rebuilt 1:1. Opens it in Chrome like a person (scrolls it, waits for it to settle, clicks away a cookie banner) and measures everything: the stack it was built with (framework, styling, motion libraries, host), every colour, type style, radius, shadow, blur and spacing value, each section top to bottom with its exact copy and structure, hover states, the header on scroll, scroll reveals, keyframes, fonts, breakpoints, and how it changes at tablet and phone width. Writes site-prompts/<site>/ (PROMPT.md, spec.json, page.html, css/, shots/) and returns the measurements with a screenshot of every section. Then look at the shots and call site_prompt with your visual notes to finish the prompt.',
+		description: 'Read a website so it can be rebuilt 1:1. Opens it in Chrome like a person (scrolls it, waits for it to settle, clicks away a cookie banner) and measures everything: the stack it was built with (framework, styling, motion libraries, host), every colour, type style, radius, shadow, blur and spacing value, each section top to bottom with its exact copy and structure, hover states, the header on scroll, scroll reveals, keyframes, fonts, breakpoints, and how it changes at tablet and phone width. Writes ~/Documents/Site Prompts/<site>/ (PROMPT.md, exact.html, spec.json, css/, shots/) and returns the measurements with a screenshot of every section. Then look at the shots and call site_prompt with your visual notes to finish the prompt.',
 		inputSchema: { type: 'object', properties: { url: { type: 'string', description: 'the page, e.g. https://linear.app or stripe.com/payments' } }, required: ['url'] },
 		run: async (a) => {
 			const url = urlOf(a.url);
@@ -64,7 +67,7 @@ PROMPT.md is written from the measurements. Finish it: look at each section shot
 	},
 	{
 		name: 'site_prompt',
-		description: 'Finish the build prompt for a site already read with site_read: adds your visual notes per section and an overall paragraph, and rewrites site-prompts/<site>/PROMPT.md. Returns where it is and how to use it.',
+		description: 'Finish the build prompt for a site already read with site_read: adds your visual notes per section and an overall paragraph, and rewrites ~/Documents/Site Prompts/<site>/PROMPT.md. Copies it to the clipboard and returns it in full, with a link to the file: show both to the person.',
 		inputSchema: {
 			type: 'object', required: ['url'],
 			properties: {
@@ -88,9 +91,18 @@ PROMPT.md is written from the measurements. Finish it: look at each section shot
 				const cmd = process.platform === 'darwin' ? ['pbcopy', []] : process.platform === 'win32' ? ['clip', []] : ['xclip', ['-selection', 'clipboard']];
 				try { const p = spawn(cmd[0], cmd[1]); p.on('error', () => res(false)); p.on('close', (c) => res(c === 0)); p.stdin.end(md); } catch { res(false); }
 			});
-			return `${copied ? 'The prompt is on the clipboard. ' : ''}PROMPT.md is ready: ${rel(path.join(dir, 'PROMPT.md'))} (${Math.round(md.length / 1000)}k characters, ${spec.sections.length} sections${missing.length ? `; no visual notes for section ${missing.join(', ')}` : ''}).
+			const file = path.join(dir, 'PROMPT.md');
+			return [
+				text(`PROMPT.md is ready${copied ? ' and on the clipboard' : ''}: ${rel(file)} (${Math.round(md.length / 1000)}k characters, ${spec.sections.length} sections${missing.length ? `; no visual notes for section ${missing.join(', ')}` : ''}).
+Link: ${link(file)}
+Folder: ${link(dir)}
 
-Tell the person in a few lines: the stack it was built with, what the prompt covers, and how to use it: open ${rel(dir)}/ in Claude Code, Codex or Cursor and say "Build PROMPT.md" (exact.html, the shots, spec.json and css/ beside it are what make it pixel perfect), or paste PROMPT.md into any builder with the shots attached. After a rebuild, site_compare scores it against the original.`;
+Show the person, in this order:
+1. The prompt below IN FULL, inside one \`\`\`markdown block, exactly as written (never shortened or summarised).
+2. Then: "Saved to [${rel(file)}](${link(file)})${copied ? ', and copied to your clipboard' : ''}." and one line: what the site was built with.
+3. Then how to use it: paste it into Claude Code, Codex, Cursor or v0; for pixel perfect, open the folder ${rel(dir)} in Claude Code or Codex and say "Build PROMPT.md" (exact.html and the shots beside it are what make it exact). After a rebuild, site_compare scores it against the original.`),
+				text(md),
+			];
 		},
 	},
 	{

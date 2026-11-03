@@ -4,5 +4,4 @@ argument-hint: the site, e.g. https://linear.app
 ---
 
 Use the site-prompt skill on $ARGUMENTS: site_read, look at every section shot, then finish the prompt with
-site_prompt. Then tell me in a few lines what the site was built with, that the prompt is on my clipboard, and where
-PROMPT.md and its reference files are.
+site_prompt. Show me the whole prompt in the chat, then the link to the .md file, then what the site was built with.

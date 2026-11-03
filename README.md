@@ -13,7 +13,7 @@ A Claude Code (and Codex) plugin. Plain Node 22+ and the Chrome already on your 
 
 ## What you get
 
-`site-prompts/<site>/`
+`~/Documents/Site Prompts/<site>/` (the prompt is also shown in the chat and copied to the clipboard)
 
 - **PROMPT.md**: the build prompt. Stack it was built with (framework, styling, motion libraries, host, with the
   evidence), every colour, type style, radius, shadow, blur and spacing value, each section with its exact copy and
@@ -24,7 +24,7 @@ A Claude Code (and Codex) plugin. Plain Node 22+ and the Chrome already on your 
 - **shots/**: desktop, tablet and phone full pages, every section at 1440 px.
 - **spec.json**, **css/**: every measurement, and the compiled stylesheets.
 
-`site-prompts/<site>/components/<name>/` for a component: **component.html** (standalone, exact, with its hover,
+`~/Documents/Site Prompts/<site>/components/<name>/` for a component: **component.html** (standalone, exact, with its hover,
 focus and press states, keyframes and embedded fonts), **COMPONENT.md**, and screenshots of the original and the
 clone, checked pixel by pixel.
 

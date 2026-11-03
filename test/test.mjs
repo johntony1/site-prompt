@@ -124,7 +124,7 @@ try {
 	const r = await call('site_read', { url: URL0 });
 	writeFileSync(path.join(out, 'read.txt'), r.words);
 	check(!r.error, `site_read (${Math.round(r.ms / 1000)} s)`, r.error ? r.words.slice(0, 400) : undefined);
-	const dir = path.join(work, 'site-prompts', '127.0.0.1-' + site.address().port);
+	const dir = path.join(work, '127.0.0.1-' + site.address().port);
 	const spec = JSON.parse(readFileSync(path.join(dir, 'spec.json'), 'utf8'));
 	check(/Next\.js/.test(spec.stack.framework ?? '') && spec.stack.hosting === 'Vercel', 'stack: Next.js on Vercel', { framework: spec.stack.framework, hosting: spec.stack.hosting });
 	check(spec.sections.length >= 4 && spec.sections.length <= 6, 'sections: header, hero, features, cta, footer', spec.sections.map((s) => s.selector));
@@ -155,6 +155,7 @@ try {
 	const fin = await call('site_prompt', { url: URL0, overall: 'Airy, light, one violet accent.', notes: { 2: 'A centred headline with lots of air; a violet pill button with a soft glow under it.' } });
 	md = readFileSync(path.join(dir, 'PROMPT.md'), 'utf8');
 	check(!fin.error && md.includes('Airy, light, one violet accent.') && md.includes('soft glow under it'), 'site_prompt adds the notes', fin.words.slice(0, 120));
+	check(fin.words.includes(md.trim()) && /Link: file:\/\//.test(fin.words), 'site_prompt returns the whole prompt and a link to the file');
 
 	// 3. a component by selector
 	const c = await call('site_component', { url: URL0, selector: '.hero .btn', name: 'hero button' });
