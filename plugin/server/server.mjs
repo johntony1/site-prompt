@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // site-prompt: any website, or any part of one, into a build prompt precise enough to rebuild it 1:1, measured from
 // the live page in Chrome, and a check that the rebuild matches. An MCP server over stdio; plain Node ≥ 22, nothing to install.
+import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -82,7 +83,12 @@ PROMPT.md is written from the measurements. Finish it: look at each section shot
 			const md = compose(spec, { notes, overall: a.overall ? String(a.overall) : '' });
 			writeFileSync(path.join(dir, 'PROMPT.md'), md);
 			const missing = spec.sections.filter((x) => !notes[x.n]).map((x) => x.n);
-			return `PROMPT.md is ready: ${rel(path.join(dir, 'PROMPT.md'))} (${Math.round(md.length / 1000)}k characters, ${spec.sections.length} sections${missing.length ? `; no visual notes for section ${missing.join(', ')}` : ''}).
+			// on the clipboard, ready to paste into any builder
+			const copied = await new Promise((res) => {
+				const cmd = process.platform === 'darwin' ? ['pbcopy', []] : process.platform === 'win32' ? ['clip', []] : ['xclip', ['-selection', 'clipboard']];
+				try { const p = spawn(cmd[0], cmd[1]); p.on('error', () => res(false)); p.on('close', (c) => res(c === 0)); p.stdin.end(md); } catch { res(false); }
+			});
+			return `${copied ? 'The prompt is on the clipboard. ' : ''}PROMPT.md is ready: ${rel(path.join(dir, 'PROMPT.md'))} (${Math.round(md.length / 1000)}k characters, ${spec.sections.length} sections${missing.length ? `; no visual notes for section ${missing.join(', ')}` : ''}).
 
 Tell the person in a few lines: the stack it was built with, what the prompt covers, and how to use it: open ${rel(dir)}/ in Claude Code, Codex or Cursor and say "Build PROMPT.md" (exact.html, the shots, spec.json and css/ beside it are what make it pixel perfect), or paste PROMPT.md into any builder with the shots attached. After a rebuild, site_compare scores it against the original.`;
 		},

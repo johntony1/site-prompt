@@ -8,7 +8,7 @@ A Claude Code (and Codex) plugin. Plain Node 22+ and the Chrome already on your 
     /plugin marketplace add <this repo>
     /plugin install site-prompt@site-prompt
 
-    /site-prompt:clone https://linear.app
+    /site-prompt:prompt https://linear.app
     /site-prompt:component https://stripe.com
 
 ## What you get
