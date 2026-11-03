@@ -1,7 +1,7 @@
 // Chrome over the DevTools protocol with nothing installed: Node ≥ 22's own WebSocket talks to the Chrome (or
 // Chromium, Edge, Brave) already on the machine. Headless for reading and comparing; a real window for picking.
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { ToolError } from './mcp.mjs';
@@ -27,7 +27,8 @@ export function findChrome() {
 	return (CANDIDATES[process.platform] ?? []).find((p) => existsSync(p)) ?? null;
 }
 
-export class Page {
+/** One DevTools WebSocket, shared by every session on it (a browser-level socket carries many tabs). */
+class Router {
 	constructor(ws) {
 		this.ws = ws;
 		this.seq = 0;
@@ -35,7 +36,7 @@ export class Page {
 		this.listeners = new Map();
 		ws.addEventListener('message', (ev) => {
 			const msg = JSON.parse(typeof ev.data === 'string' ? ev.data : Buffer.from(ev.data).toString());
-			if (msg.method) for (const fn of this.listeners.get(msg.method) ?? []) fn(msg.params);
+			if (msg.method) for (const fn of this.listeners.get(`${msg.sessionId ?? ''}|${msg.method}`) ?? []) fn(msg.params);
 			const w = msg.id !== undefined && this.waiting.get(msg.id);
 			if (!w) return;
 			this.waiting.delete(msg.id);
@@ -43,24 +44,22 @@ export class Page {
 			else w.resolve(msg.result);
 		});
 		ws.addEventListener('close', () => {
+			this.closed = true;
 			for (const w of this.waiting.values()) w.reject(new Error('Chrome went away'));
 			this.waiting.clear();
+			for (const fn of this.listeners.get('|close') ?? []) fn();
 		});
 	}
-	on(method, fn) {
-		if (!this.listeners.has(method)) this.listeners.set(method, new Set());
-		this.listeners.get(method).add(fn);
-		return () => this.listeners.get(method).delete(fn);
+	on(method, fn, sessionId) {
+		const key = `${sessionId ?? ''}|${method}`;
+		if (!this.listeners.has(key)) this.listeners.set(key, new Set());
+		this.listeners.get(key).add(fn);
+		return () => this.listeners.get(key).delete(fn);
 	}
-	once(method, timeoutMs = 30_000) {
-		return new Promise((resolve, reject) => {
-			const timer = setTimeout(() => (off(), reject(new Error(`${method} did not come`))), timeoutMs);
-			const off = this.on(method, (p) => (clearTimeout(timer), off(), resolve(p)));
-		});
-	}
-	send(method, params = {}, timeoutMs = 60_000) {
+	send(method, params, sessionId, timeoutMs = 60_000) {
 		const id = ++this.seq;
 		return new Promise((resolve, reject) => {
+			if (this.closed) return reject(new Error('Chrome went away'));
 			const timer = setTimeout(() => {
 				this.waiting.delete(id);
 				reject(new Error(`${method} timed out`));
@@ -69,8 +68,27 @@ export class Page {
 				resolve: (v) => (clearTimeout(timer), resolve(v)),
 				reject: (e) => (clearTimeout(timer), reject(e)),
 			});
-			this.ws.send(JSON.stringify({ id, method, params }));
+			this.ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
 		});
+	}
+}
+
+export class Page {
+	constructor(router, sessionId = null) {
+		this.router = router;
+		this.sessionId = sessionId;
+	}
+	on(method, fn) {
+		return this.router.on(method, fn, this.sessionId);
+	}
+	once(method, timeoutMs = 30_000) {
+		return new Promise((resolve, reject) => {
+			const timer = setTimeout(() => (off(), reject(new Error(`${method} did not come`))), timeoutMs);
+			const off = this.on(method, (p) => (clearTimeout(timer), off(), resolve(p)));
+		});
+	}
+	send(method, params = {}, timeoutMs = 60_000) {
+		return this.router.send(method, params, this.sessionId, timeoutMs);
 	}
 	/** Evaluate an expression in the page (awaiting promises) and return its JSON value. */
 	async eval(expression, timeoutMs = 60_000) {
@@ -84,11 +102,18 @@ export class Page {
 	}
 }
 
+const socket = (url) => new Promise((resolve, reject) => {
+	const ws = new WebSocket(url);
+	ws.addEventListener('open', () => resolve(ws), { once: true });
+	ws.addEventListener('error', () => reject(new Error('could not attach to Chrome')), { once: true });
+});
+
 /** A Chrome of its own (closed with .close()). headless: false opens a real window the person can use. */
-export async function launch({ headless = true, width = 1440, height = 900 } = {}) {
+export async function launch({ headless = true, width = 1440, height = 900, profileDir = null } = {}) {
 	const exe = findChrome();
 	if (!exe) throw new ToolError('site-prompt needs Chrome (or Chromium, Edge, Brave) and found none. Install Google Chrome, or set SITE_PROMPT_CHROME to a Chromium-based browser.');
-	const profile = mkdtempSync(path.join(os.tmpdir(), 'site-prompt-chrome-'));
+	const profile = profileDir ?? mkdtempSync(path.join(os.tmpdir(), 'site-prompt-chrome-'));
+	if (profileDir) mkdirSync(profileDir, { recursive: true });
 	const proc = spawn(exe, [
 		...(headless ? ['--headless=new', '--hide-scrollbars', '--mute-audio'] : [`--window-size=${width},${height + 90}`, '--new-window']),
 		'--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check',
@@ -111,12 +136,7 @@ export async function launch({ headless = true, width = 1440, height = 900 } = {
 		target = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((t) => t.type === 'page');
 		if (!target) await new Promise((r) => setTimeout(r, 100));
 	}
-	const ws = new WebSocket(target.webSocketDebuggerUrl);
-	await new Promise((resolve, reject) => {
-		ws.addEventListener('open', resolve, { once: true });
-		ws.addEventListener('error', () => reject(new Error('could not attach to Chrome')), { once: true });
-	});
-	const page = new Page(ws);
+	const page = new Page(new Router(await socket(target.webSocketDebuggerUrl)));
 	await page.send('Page.enable');
 	await page.send('Runtime.enable');
 	await page.send('Network.enable');
@@ -128,7 +148,7 @@ export async function launch({ headless = true, width = 1440, height = 900 } = {
 	if (headless) await viewport(page, width, height);
 	const close = () => {
 		try { proc.kill('SIGKILL'); } catch {}
-		try { rmSync(profile, { recursive: true, force: true }); } catch {}
+		if (!profileDir) try { rmSync(profile, { recursive: true, force: true }); } catch {}
 	};
 	open.add(close);
 	return { page, close: () => (open.delete(close), close()) };
@@ -192,10 +212,10 @@ export async function scrollThrough(page, { step = 0.7, pause = 220 } = {}) {
 }
 
 /** A screenshot of a region of the page in page coordinates (beyond the viewport too). */
-export async function shot(page, { x = 0, y = 0, width, height, scale = 1, format = 'jpeg', quality = 82 }) {
+export async function shot(page, { x = 0, y = 0, width, height, scale = 1, format = 'jpeg', quality = 82, beyond = true }) {
 	const r = await page.send('Page.captureScreenshot', {
 		format, ...(format === 'jpeg' ? { quality } : {}),
-		clip: { x, y, width: Math.max(1, width), height: Math.max(1, height), scale }, captureBeyondViewport: true, fromSurface: true,
+		clip: { x, y, width: Math.max(1, width), height: Math.max(1, height), scale }, captureBeyondViewport: beyond, fromSurface: true,
 	}, 90_000);
 	return Buffer.from(r.data, 'base64');
 }
@@ -204,4 +224,56 @@ export async function pageSize(page) {
 	const m = await page.send('Page.getLayoutMetrics');
 	const c = m.cssContentSize ?? m.contentSize;
 	return { width: Math.ceil(c.width), height: Math.ceil(c.height) };
+}
+
+// ── the person's own Chrome (Chrome 144+, remote debugging turned on at chrome://inspect/#remote-debugging) ──
+
+const PROFILES = {
+	darwin: ['Google/Chrome', 'Google/Chrome Beta', 'Google/Chrome Canary', 'Chromium', 'Microsoft Edge', 'BraveSoftware/Brave-Browser'].map((d) => path.join(os.homedir(), 'Library', 'Application Support', d)),
+	linux: ['google-chrome', 'google-chrome-beta', 'chromium', 'microsoft-edge', 'BraveSoftware/Brave-Browser'].map((d) => path.join(os.homedir(), '.config', d)),
+	win32: ['Google/Chrome/User Data', 'Microsoft/Edge/User Data', 'BraveSoftware/Brave-Browser/User Data'].map((d) => path.join(process.env.LOCALAPPDATA ?? '', d)),
+};
+
+/** Where the person's running Chrome listens, if they turned remote debugging on: Chrome writes DevToolsActivePort. */
+export function ownChrome() {
+	const dirs = process.env.SITE_PROMPT_CHROME_DIR ? [process.env.SITE_PROMPT_CHROME_DIR] : PROFILES[process.platform] ?? [];
+	for (const dir of dirs) {
+		try {
+			const [port, wsPath] = readFileSync(path.join(dir, 'DevToolsActivePort'), 'utf8').trim().split('\n');
+			if (+port) return { port: +port, path: wsPath, dir };
+		} catch {}
+	}
+	return null;
+}
+
+/** Attach to a tab in the person's own Chrome (opening `url` in a new tab when it isn't open). Chrome asks them to allow it. */
+export async function connectOwn(url, { log = () => {} } = {}) {
+	const own = ownChrome();
+	if (!own) return null;
+	log('asking your Chrome (approve the prompt in Chrome)');
+	const ws = await Promise.race([socket(`ws://127.0.0.1:${own.port}${own.path}`), new Promise((_, rej) => setTimeout(() => rej(new ToolError('Your Chrome did not answer. If it showed a prompt, allow it and try again; or turn remote debugging off at chrome://inspect/#remote-debugging to use a separate window.')), 90_000))]).catch((e) => {
+		if (e instanceof ToolError) throw e;
+		return null; // the file is stale: Chrome is closed
+	});
+	if (!ws) return null;
+	const router = new Router(ws);
+	const { targetInfos } = await router.send('Target.getTargets', {}, null, 90_000);
+	const want = url ? new URL(url) : null;
+	const pages = targetInfos.filter((t) => t.type === 'page' && /^https?:/.test(t.url));
+	let target = want && pages.find((t) => { try { const u = new URL(t.url); return u.host === want.host && u.pathname === want.pathname; } catch { return false; } })
+		|| want && pages.find((t) => { try { return new URL(t.url).host === want.host; } catch { return false; } });
+	let opened = false;
+	if (!target && want) {
+		const { targetId } = await router.send('Target.createTarget', { url: want.href });
+		target = { targetId, url: want.href };
+		opened = true;
+	}
+	if (!target) target = pages[0];
+	if (!target) throw new ToolError('Your Chrome has no web page open: give me the link to open.');
+	const { sessionId } = await router.send('Target.attachToTarget', { targetId: target.targetId, flatten: true });
+	await router.send('Target.activateTarget', { targetId: target.targetId }).catch(() => {});
+	const page = new Page(router, sessionId);
+	for (const d of ['Page', 'Runtime', 'DOM', 'CSS']) await page.send(`${d}.enable`);
+	if (opened) await page.once('Page.loadEventFired', 45_000).catch(() => {});
+	return { page, own: true, url: target.url, close: () => { try { ws.close(); } catch {} }, router };
 }

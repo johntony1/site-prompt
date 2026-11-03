@@ -1,8 +1,7 @@
 ---
-description: Clone one part of a website exactly (click it on the page)
-argument-hint: the page, and optionally what to clone, e.g. "https://stripe.com the hero button"
+description: Point at the parts of a website you like and get a prompt for each
+argument-hint: the site, e.g. https://linear.app
 ---
 
-Use the site-prompt skill to clone one component from $ARGUMENTS. If I named the part and you can find a selector
-for it from the page, use it; otherwise tell me a Chrome window is opening and I should click the part I want, then
-call site_component. Show me what it cloned, its states, and how to use component.html.
+Use the site-prompt skill's pick mode on $ARGUMENTS: open it with site_pick, tell me how to pick, then wait for my
+picks and show me each prompt in full with its saved link.

@@ -7,7 +7,7 @@ A Claude Code (and Codex) plugin. Plain Node 22+ and the Chrome already on your 
 
     sh install.sh                       # then, in any Claude Code session:
     /site-prompt https://linear.app
-    /site-prompt component https://stripe.com
+    /site-prompt pick https://linear.app     # hover what you like, click it, Get prompts
 
 (Or as a plugin: /plugin marketplace add <this repo>, then /site-prompt:prompt <link>.)
 
@@ -28,11 +28,22 @@ A Claude Code (and Codex) plugin. Plain Node 22+ and the Chrome already on your 
 focus and press states, keyframes and embedded fonts), **COMPONENT.md**, and screenshots of the original and the
 clone, checked pixel by pixel.
 
+## Pick mode: point at what you like
+
+`/site-prompt pick <link>` puts a small toolbar on the live site. Hover anything and it says what it is (Button,
+Text, Illustration, Section, Component); click what you like, optionally say what you like about it, pick as many as
+you want, press **Get prompts**. Each pick becomes a prompt with its exact code, states, type or artwork, shown in
+the chat, saved under `picks/`, and copied to the clipboard.
+
+No extension and no app: it runs in **your own Chrome** when remote debugging is on (`chrome://inspect/#remote-debugging`,
+Chrome 144 or later; Chrome asks you to allow each session), and otherwise in a Chrome window it opens for you.
+
 ## Tools
 
 - `site_read`: read and measure a page, write the folder above.
 - `site_prompt`: add the agent's visual notes per section to PROMPT.md.
-- `site_component`: clone one component (click it in a Chrome window, or pass a selector).
+- `site_pick`: pick mode (above).
+- `site_component`: clone one component by selector.
 - `site_compare`: score a rebuild against the original, band by band, with original | clone | difference sheets.
 
 ## Limits

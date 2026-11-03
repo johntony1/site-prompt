@@ -12,6 +12,7 @@ import { image, serve, text, ToolError } from './mcp.mjs';
 import { compose } from './prompt.mjs';
 import { read } from './read.mjs';
 import { buildStack } from './stack.mjs';
+import * as pick from './pick.mjs';
 
 const VERSION = '0.1.0';
 // everything lands in the person's Documents, one folder per site (the prompt with its reference files beside it)
@@ -30,7 +31,14 @@ const dirFor = (u, sub = '') => path.join(base(), slug(u) + sub);
 const rel = (p) => p.replace(os.homedir(), '~');
 const link = (p) => pathToFileURL(p).href;
 
-const INSTRUCTIONS = `site-prompt turns a website into a build prompt that rebuilds it 1:1. Whole page: site_read (measures and photographs it), look at every section shot, then site_prompt with a visual note per section (what only eyes can tell: imagery, depth, the feel) to finish PROMPT.md. One part of a page: site_component (the person clicks it in a Chrome window, or you pass a selector). After a rebuild: site_compare against the original. Only the sites the person names.`;
+/** On the clipboard, ready to paste into any builder. */
+const clipboard = (t) => new Promise((res) => {
+	if (process.env.SITE_PROMPT_NO_CLIPBOARD === '1') return res(false);
+	const cmd = process.platform === 'darwin' ? ['pbcopy', []] : process.platform === 'win32' ? ['clip', []] : ['xclip', ['-selection', 'clipboard']];
+	try { const p = spawn(cmd[0], cmd[1]); p.on('error', () => res(false)); p.on('close', (c) => res(c === 0)); p.stdin.end(t); } catch { res(false); }
+});
+
+const INSTRUCTIONS = `site-prompt turns a website into a build prompt that rebuilds it 1:1. Whole page: site_read (measures and photographs it), look at every section shot, then site_prompt with a visual note per section (what only eyes can tell: imagery, depth, the feel) to finish PROMPT.md. Point at parts of a site and get a prompt for each (a button, a line of type, an illustration, a section): site_pick (it opens the site in the person's own Chrome when remote debugging is on, else a Chrome window, with a picker toolbar). One part by selector: site_component. After a rebuild: site_compare against the original. Only the sites the person names.`;
 
 const tools = [
 	{
@@ -86,11 +94,7 @@ PROMPT.md is written from the measurements. Finish it: look at each section shot
 			const md = compose(spec, { notes, overall: a.overall ? String(a.overall) : '' });
 			writeFileSync(path.join(dir, 'PROMPT.md'), md);
 			const missing = spec.sections.filter((x) => !notes[x.n]).map((x) => x.n);
-			// on the clipboard, ready to paste into any builder
-			const copied = await new Promise((res) => {
-				const cmd = process.platform === 'darwin' ? ['pbcopy', []] : process.platform === 'win32' ? ['clip', []] : ['xclip', ['-selection', 'clipboard']];
-				try { const p = spawn(cmd[0], cmd[1]); p.on('error', () => res(false)); p.on('close', (c) => res(c === 0)); p.stdin.end(md); } catch { res(false); }
-			});
+			const copied = await clipboard(md);
 			const file = path.join(dir, 'PROMPT.md');
 			return [
 				text(`PROMPT.md is ready${copied ? ' and on the clipboard' : ''}: ${rel(file)} (${Math.round(md.length / 1000)}k characters, ${spec.sections.length} sections${missing.length ? `; no visual notes for section ${missing.join(', ')}` : ''}).
@@ -103,6 +107,51 @@ Show the person, in this order:
 3. Then how to use it: paste it into Claude Code, Codex, Cursor or v0; for pixel perfect, open the folder ${rel(dir)} in Claude Code or Codex and say "Build PROMPT.md" (exact.html and the shots beside it are what make it exact). After a rebuild, site_compare scores it against the original.`),
 				text(md),
 			];
+		},
+	},
+	{
+		name: 'site_pick',
+		description: 'Let the person point at what they like on a website (a button, a line of type, an illustration, a section, any component) and get a prompt that builds exactly that. First call with url: opens the site with a picker toolbar, in the person\'s own Chrome if remote debugging is on (chrome://inspect/#remote-debugging; Chrome asks them to allow it), else in a Chrome window site-prompt opens; returns at once so you can tell them how to pick. Then call with no url to wait for their picks: they hover, click what they like (optionally typing what they like about it), and press Get prompts. Each pick comes back as a prompt with its exact code, its states, its type or artwork, saved in ~/Documents/Site Prompts/<site>/picks/, with a screenshot. They can keep browsing and picking; call again to wait for more. stop: true closes it.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				url: { type: 'string', description: 'the site to open (first call); omit to wait for picks in the open session' },
+				mode: { type: 'string', enum: ['auto', 'own', 'window'], description: 'auto (default): their own Chrome when reachable, else a window' },
+				wait: { type: 'number', description: 'seconds to wait for picks (default 240, at most 600)' },
+				stop: { type: 'boolean', description: 'close the picking session' },
+			},
+		},
+		run: async (a) => {
+			if (a.stop) { await pick.stop(); return 'Closed the picker.'; }
+			if (a.url || !pick.active()) {
+				if (!a.url) throw new ToolError('url: the site to pick from (no picking session is open).');
+				const url = urlOf(a.url);
+				const o = await pick.open(url, { mode: a.mode });
+				return `The picker is open on ${url} in ${o.own ? 'your own Chrome (a new tab, or the one already on that site)' : 'a Chrome window site-prompt opened (sign in there once if the site needs it; it remembers)'}.
+
+Tell the person, in a few short lines: hover anything on the page (it says what it is: Button, Text, Illustration, Section); click what they like, optionally type what they like about it; ↑ picks the bigger thing around it, Esc pauses picking so they can use the site normally; then press Get prompts in the toolbar (bottom right). They can pick several things at once, and move to other pages.${o.own ? '' : `\nIf they want this in their own Chrome next time (their tabs and logins): turn on remote debugging at chrome://inspect/#remote-debugging (Chrome 144 or later).`}
+
+Then call site_pick with no url to wait for the picks.`;
+			}
+			const batch = await pick.next(Math.min(600, Math.max(5, Number(a.wait) || 240)));
+			if (!batch) return 'Nothing picked yet; the picker is still open. Call site_pick again (no url) to keep waiting, or stop: true to close it.';
+			const results = await pick.processBatch(batch, base());
+			const good = results.filter((x) => !x.error);
+			const all = good.map((x) => x.md).join('\n\n---\n\n');
+			const copied = good.length ? await clipboard(all) : false;
+			const out = [text(`${good.length} prompt${good.length === 1 ? '' : 's'} from ${batch.url}${copied ? ` (all ${good.length > 1 ? 'of them ' : ''}copied to the clipboard)` : ''}.${results.filter((x) => x.error).map((x) => `\nCould not read ${x.n} (${x.label}): ${x.error}`).join('')}
+
+Show the person each prompt below IN FULL inside its own \`\`\`markdown block, exactly as written, each followed by "Saved to [path](link)" and one line on how close the copy is. Keep your own words short. The picker stays open: they can pick more and press Get prompts again (call site_pick with no url to wait).`)];
+			for (const x of good) {
+				const file = path.join(x.dir, 'PROMPT.md');
+				const match = x.r.size.ok && (x.r.ssim >= 0.97 || x.r.diff <= 0.015);
+				out.push(text(`── ${x.n}. ${x.label}${x.note ? ` · "${x.note}"` : ''}
+Saved: ${rel(file)}  (link: ${link(file)})
+Copy check: ${match ? 'matches the original' : 'close, not exact'} (${(x.r.diff * 100).toFixed(1)}% pixel difference, size ${x.r.size.original.join('×')} → ${x.r.size.clone.join('×')})`));
+				out.push(text(x.md));
+				for (const f of ['original.png', 'original-hover.png']) if (existsSync(path.join(x.dir, f))) out.push(image(readFileSync(path.join(x.dir, f)), 'image/png'));
+			}
+			return out;
 		},
 	},
 	{

@@ -29,14 +29,24 @@ the result with the original until it matches. These tools do each part.
 If they ask you to build it too: build from PROMPT.md section by section, run it locally, then `site_compare` with
 the original and the local url. Fix the first failing band from the top, compare again, up to five rounds.
 
-## One component
+## Point at what you like (pick mode)
 
-`site_component` with the url. Without a selector, a Chrome window opens on the page: tell the person to hover the
-part they want and click it (↑ picks the parent, Esc stops) before you call it. With a `selector`, it is taken
-directly. It writes `component.html` (the exact component, standalone, with its hover, focus and press states,
-keyframes and fonts), `COMPONENT.md` (the prompt to rebuild it in any stack) and screenshots, and checks the clone
-against the original pixel by pixel. If they want it in their stack, rebuild it from component.html and compare
-by eye against original.png and original-hover.png.
+When the person wants a part of a site (a button style, an illustration, a line of type, a section, any component),
+or says "pick", "hover", "point at":
+
+1. `site_pick` with the url. It opens the site with a picker toolbar: in their own Chrome when remote debugging is
+   on (chrome://inspect/#remote-debugging, Chrome 144+; Chrome asks them to allow it), else in a Chrome window
+   site-prompt opens (it keeps its own profile, so a sign-in stays). It returns at once.
+2. Tell them in a few short lines: hover anything (it says what it is), click what they like, optionally type what
+   they like about it, ↑ picks the bigger thing around it, Esc pauses picking so the site works normally, then
+   press Get prompts (bottom right). Several picks at once, on any page of the site.
+3. `site_pick` with no url waits for them (call it again if it times out; it keeps the session).
+4. Each pick comes back as a prompt with its exact code (markup and computed styles), its hover, focus and press
+   states, its type spec or its artwork, and a screenshot, saved in `~/Documents/Site Prompts/<site>/picks/` and
+   copied to the clipboard. Show every prompt in full in its own markdown block with its saved link, then wait
+   again for more picks. `stop: true` closes the picker.
+
+One part by selector, without the person clicking: `site_component` with url and selector.
 
 ## What to say about the stack
 

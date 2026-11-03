@@ -57,8 +57,8 @@ function picker() {
 }
 
 /** In the page: snapshot the subtree of [data-sp-picked] (computed styles minus defaults), remember the base look. */
-function snapshot() {
-	const root = document.querySelector('[data-sp-picked]');
+function snapshot(sel) {
+	const root = document.querySelector(sel || '[data-sp-picked]');
 	if (!root) return null;
 	const frame = document.createElement('iframe');
 	frame.style.cssText = 'position:absolute;width:0;height:0;border:0;visibility:hidden';
@@ -135,7 +135,7 @@ function snapshot() {
 		if (i === undefined) { c.remove(); continue; }
 		for (const a of [...c.attributes]) {
 			const n = a.name;
-			if (n === 'style' || n === 'class' || n === 'id' || n.startsWith('on') || n.startsWith('data-') || n === 'srcset' || n === 'sizes' || n === 'loading' || n === 'decoding' || n === 'fetchpriority' || n === 'nonce' || n === 'jsaction' || n === 'tabindex' && c.tagName !== 'BUTTON') c.removeAttribute(n);
+			if (n === 'style' || n === 'class' || (n === 'id' && o.namespaceURI !== SVG) || n.startsWith('on') || n.startsWith('data-') || n === 'srcset' || n === 'sizes' || n === 'loading' || n === 'decoding' || n === 'fetchpriority' || n === 'nonce' || n === 'jsaction' || n === 'tabindex' && c.tagName !== 'BUTTON') c.removeAttribute(n);
 		}
 		c.setAttribute('class', `c${i}`);
 		if (o.tagName === 'IMG') c.setAttribute('src', abs(o.currentSrc || o.src));
@@ -227,8 +227,21 @@ export async function clone(url, outDir, { selector, wait: waitS = 180, log = ()
 			if (ev.payload !== 'picked') throw new ToolError('Picking was cancelled (Esc).');
 			await wait(200);
 		}
+		return await extract(page, '[data-sp-picked]', outDir, url, { log });
+	} finally {
+		close();
+	}
+}
+
+/** Snapshot the element at `sel` on an open page (any tab, the person's own included), with its states, fonts and
+ *  keyframes, into outDir/component.html; then render that alone and score it against the original. */
+export async function extract(page, sel, outDir, url, { log = () => {}, own = false } = {}) {
+	mkdirSync(outDir, { recursive: true });
+	{
+		await page.eval(`document.querySelector(${JSON.stringify(sel)})?.scrollIntoView({ block: 'center', inline: 'nearest' })`).catch(() => {});
+		await wait(250);
 		log('snapshotting');
-		const snap = await page.run(snapshot, null, 120_000);
+		const snap = await page.run(snapshot, sel, 120_000);
 		if (!snap) throw new ToolError('Lost the picked element (the page changed under it). Try again.');
 		// the original, at rest and in each state
 		const clip = { x: Math.floor(snap.box.x), y: Math.floor(snap.box.y), width: Math.ceil(snap.box.width), height: Math.ceil(snap.box.height) };
@@ -236,8 +249,8 @@ export async function clone(url, outDir, { selector, wait: waitS = 180, log = ()
 		const padded = { x: Math.max(0, clip.x - pad), y: Math.max(0, clip.y - pad), width: clip.width + pad * 2, height: clip.height + pad * 2 };
 		await page.eval(`(() => { const s = document.createElement('style'); s.id = 'sp-freeze'; s.textContent = '*,*::before,*::after{transition:none!important;animation-play-state:paused!important}'; document.head.appendChild(s); })()`);
 		await wait(80);
-		const restPng = await shot(page, { ...clip, format: 'png' });
-		writeFileSync(path.join(outDir, 'original.png'), await shot(page, { ...padded, format: 'png' }));
+		const restPng = await shot(page, { beyond: !own, ...clip, format: 'png' });
+		writeFileSync(path.join(outDir, 'original.png'), await shot(page, { beyond: !own, ...padded, format: 'png' }));
 		const { root } = await page.send('DOM.getDocument', { depth: 0 });
 		const states = {}, stateRules = [];
 		for (const i of snap.interactive) {
@@ -256,7 +269,7 @@ export async function clone(url, outDir, { selector, wait: waitS = 180, log = ()
 				if (Object.keys(diff).length) {
 					(states[i] ??= {})[name] = diff;
 					for (const [j, d] of Object.entries(diff)) stateRules.push(`.c${i}:${name}${+j === i ? '' : ` .c${j}`}{${d.map((x) => x + ' !important').join(';')}}`);
-					if (name === 'hover' && i === snap.interactive[0]) writeFileSync(path.join(outDir, 'original-hover.png'), await shot(page, { ...padded, format: 'png' }));
+					if (name === 'hover' && i === snap.interactive[0]) writeFileSync(path.join(outDir, 'original-hover.png'), await shot(page, { beyond: !own, ...padded, format: 'png' }));
 				}
 				await page.send('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: [] });
 			}
@@ -265,7 +278,8 @@ export async function clone(url, outDir, { selector, wait: waitS = 180, log = ()
 		// fonts and keyframes it uses, verbatim
 		const css = mine([...snap.sheets, ...(await fetchExternal(snap.external, url))]);
 		// the font files go inside component.html: a font server rarely lets another origin (or a file) load them
-		const faces = await embedFonts(css.fontFaces.filter((f) => snap.families.some((fam) => f.includes(fam))), url);
+		const remoteFaces = css.fontFaces.filter((f) => snap.families.some((fam) => f.includes(fam)));
+		const faces = await embedFonts(remoteFaces, url);
 		const frames = snap.anims.map((a) => css.keyframes[a]).filter(Boolean);
 		const bg = snap.bg;
 		const html = `<!doctype html>
@@ -286,13 +300,12 @@ ${snap.html}
 `;
 		const file = path.join(outDir, 'component.html');
 		writeFileSync(file, html);
-		close();
+		await page.eval(`(() => { document.querySelectorAll('[data-sp-n]').forEach((e) => e.removeAttribute('data-sp-n')); delete window.__spBase; })()`).catch(() => {});
 		// proof: render the snapshot alone and score it against the original element
 		log('checking the clone');
 		const chk = await launch({ width: Math.max(400, clip.width + 96), height: Math.max(300, clip.height + 96) });
 		try {
 			await goto(chk.page, pathToFileURL(file).href, { settle: 3000 });
-			// for the check only: the same sub-pixel position as the original (text anti-aliasing follows it)
 			// text anti-aliasing follows the sub-pixel position, which a standalone component does not carry: render it at
 			// the original's fraction and a few others, and keep the best
 			const fx = snap.box.x - Math.floor(snap.box.x), fy = snap.box.y - Math.floor(snap.box.y);
@@ -311,11 +324,10 @@ ${snap.html}
 			for (const t of tries) { const sc = await alignedScore(chk.page, restPng, t, P); if (!score || sc.diff < score.diff) score = sc; }
 			const ssim = score.ssim;
 			const sizeOk = Math.abs(b.width - clip.width) <= 2 && Math.abs(b.height - clip.height) <= 2;
-			return { file, outDir, snap, states, faces: faces.length, keyframes: frames.length, ssim, diff: score.diff, size: { original: [clip.width, clip.height], clone: [Math.round(b.width), Math.round(b.height)], ok: sizeOk }, sheet: Buffer.from(score.sheet.split(',')[1], 'base64'), offset: score.offset };
+			const code = { html: snap.html, css: [...remoteFaces, ...frames, ...snap.rules, ...stateRules].join('\n'), fonts: css.families.filter((f) => snap.families.includes(f.family)) };
+			return { file, outDir, snap, states, stateRules, code, faces: faces.length, keyframes: frames.length, ssim, diff: score.diff, size: { original: [clip.width, clip.height], clone: [Math.round(b.width), Math.round(b.height)], ok: sizeOk }, sheet: Buffer.from(score.sheet.split(',')[1], 'base64'), offset: score.offset };
 		} finally {
 			chk.close();
 		}
-	} finally {
-		close();
 	}
 }
