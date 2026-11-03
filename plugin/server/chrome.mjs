@@ -274,6 +274,10 @@ export async function connectOwn(url, { log = () => {} } = {}) {
 	await router.send('Target.activateTarget', { targetId: target.targetId }).catch(() => {});
 	const page = new Page(router, sessionId);
 	for (const d of ['Page', 'Runtime', 'DOM', 'CSS']) await page.send(`${d}.enable`);
-	if (opened) await page.once('Page.loadEventFired', 45_000).catch(() => {});
+	// a new tab may have finished loading before we listened: ask the page how far it is
+	if (opened) for (let t0 = Date.now(); Date.now() - t0 < 30_000; await new Promise((r) => setTimeout(r, 100))) {
+		const state = await page.eval('location.href !== "about:blank" && document.readyState').catch(() => false);
+		if (state === 'complete' || state === 'interactive') break;
+	}
 	return { page, own: true, url: target.url, close: () => { try { ws.close(); } catch {} }, router };
 }

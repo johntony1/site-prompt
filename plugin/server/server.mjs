@@ -43,7 +43,7 @@ const INSTRUCTIONS = `site-prompt turns a website into a build prompt that rebui
 const tools = [
 	{
 		name: 'site_read',
-		description: 'Read a website so it can be rebuilt 1:1. Opens it in Chrome like a person (scrolls it, waits for it to settle, clicks away a cookie banner) and measures everything: the stack it was built with (framework, styling, motion libraries, host), every colour, type style, radius, shadow, blur and spacing value, each section top to bottom with its exact copy and structure, hover states, the header on scroll, scroll reveals, keyframes, fonts, breakpoints, and how it changes at tablet and phone width. Writes ~/Documents/Site Prompts/<site>/ (PROMPT.md, exact.html, spec.json, css/, shots/) and returns the measurements with a screenshot of every section. Then look at the shots and call site_prompt with your visual notes to finish the prompt.',
+		description: 'Read a website so it can be rebuilt 1:1. Opens it in Chrome like a person (scrolls it, waits for it to settle, clicks away a cookie banner) and measures everything: the stack it was built with (framework, styling, motion libraries, host), every colour, type style, radius, shadow, blur and spacing value, each section top to bottom with its exact copy and structure, hover states, the header on scroll, scroll reveals, keyframes, fonts, breakpoints, and how it changes at tablet and phone width. Writes ~/Documents/Site Prompts/<site>/ (PROMPT.md, exact.html, spec.json, css/, shots/), copies the prompt to the clipboard, and returns it in full: show it to the person at once.',
 		inputSchema: { type: 'object', properties: { url: { type: 'string', description: 'the page, e.g. https://linear.app or stripe.com/payments' } }, required: ['url'] },
 		run: async (a) => {
 			const url = urlOf(a.url);
@@ -53,7 +53,10 @@ const tools = [
 			const proof = await compare(url, pathToFileURL(path.join(dir, 'exact.html')).href, { widths: [1440, 390] }).catch((e) => ({ error: String(e.message ?? e) }));
 			spec.exact = proof.error ? { error: proof.error } : proof.map((x) => ({ width: x.width, mean: x.mean, min: x.min, heights: x.heights }));
 			writeFileSync(path.join(dir, 'spec.json'), JSON.stringify(spec, null, '\t'));
-			writeFileSync(path.join(dir, 'PROMPT.md'), compose(spec));
+			const md = compose(spec);
+			const file = path.join(dir, 'PROMPT.md');
+			writeFileSync(file, md);
+			const copied = await clipboard(md);
 			const s = spec.stack;
 			const out = [text(`Read ${spec.url} → ${rel(dir)}/
 STACK: ${[s.builder, s.framework, s.ui, ...s.styling, ...s.motion, ...s.other].filter(Boolean).join(', ') || 'nothing conclusive'}${s.hosting ? ` · hosted on ${s.hosting}` : ''}
@@ -67,9 +70,11 @@ ${spec.sections.map((x) => `${x.n}. ${x.selector} ${x.box.width}×${x.box.height
 
 EXACT COPY: exact.html, the page as rendered with the site's own CSS (every size, position and breakpoint as the original). ${spec.exact.error ? `It could not be checked: ${spec.exact.error}` : `Against the live page: ${spec.exact.map((x) => `${x.width} px SSIM ${x.mean} (lowest band ${x.min}; height ${x.heights.clone} vs ${x.heights.original})`).join(' · ')}${spec.exact.every((x) => x.mean >= PASS) ? ', pixel for pixel.' : '. Where it falls short is what scripts draw after load (canvas, WebGL, players, script-made layout): say so.'}`}
 
-PROMPT.md is written from the measurements. Finish it: look at each section shot below (and shots/phone-full.jpg), then call site_prompt with url and notes: { "<section n>": "what the eye sees that numbers miss: the imagery and what it shows, depth and layering, glow, texture, illustration style, how dense it feels" } and overall: one paragraph on the page's look and feel. Keep notes factual; never invent copy or features.`)];
-			for (const im of sectionImages.slice(0, 14)) { out.push(text(`section ${im.n} (${im.file})`)); out.push(image(im.jpeg)); }
-			if (sectionImages.length > 14) out.push(text(`${sectionImages.length - 14} more section shots are in ${rel(dir)}/shots/.`));
+THE PROMPT IS READY (below, in full)${copied ? ', and on the clipboard' : ''}: ${rel(file)} (link: ${link(file)}).
+
+Do this now, in this same reply, without waiting for the person: show the prompt below IN FULL inside one \`\`\`markdown block, exactly as written (never shortened), then "Saved to [${rel(file)}](${link(file)})${copied ? ', and copied to your clipboard' : ''}." and one line on what the site was built with. Nothing else is needed. (Only if the person later asks to refine it: site_prompt adds visual notes per section.)`)];
+			out.push(text(md));
+			for (const im of sectionImages.slice(0, 4)) { out.push(text(`section ${im.n} (${im.file})`)); out.push(image(im.jpeg)); }
 			return out;
 		},
 	},
@@ -111,7 +116,7 @@ Show the person, in this order:
 	},
 	{
 		name: 'site_pick',
-		description: 'Let the person point at what they like on a website (a button, a line of type, an illustration, a section, any component) and get a prompt that builds exactly that. First call with url: opens the site with a picker toolbar, in the person\'s own Chrome if remote debugging is on (chrome://inspect/#remote-debugging; Chrome asks them to allow it), else in a Chrome window site-prompt opens; returns at once so you can tell them how to pick. Then call with no url to wait for their picks: they hover, click what they like (optionally typing what they like about it), and press Get prompts. Each pick comes back as a prompt with its exact code, its states, its type or artwork, saved in ~/Documents/Site Prompts/<site>/picks/, with a screenshot. They can keep browsing and picking; call again to wait for more. stop: true closes it.',
+		description: 'Let the person point at what they like on a website (a button, a line of type, an illustration, a section, any component) and get a prompt that builds exactly that. With url: opens the site with a picker toolbar (in the person\'s own Chrome if remote debugging is on at chrome://inspect/#remote-debugging, else a Chrome window site-prompt opens) AND waits in the same call until they press Get prompts. Before calling, tell them in one or two lines: hover, click what you like, then Get prompts in the toolbar (bottom right). Each pick comes back as a prompt with its exact code, states, type or artwork and a screenshot, saved in ~/Documents/Site Prompts/<site>/picks/ and copied to the clipboard. If it times out with nothing picked, call it again at once with no url (never end your turn to wait for a reply). stop: true closes it.',
 		inputSchema: {
 			type: 'object',
 			properties: {
@@ -123,25 +128,22 @@ Show the person, in this order:
 		},
 		run: async (a) => {
 			if (a.stop) { await pick.stop(); return 'Closed the picker.'; }
+			let opened = '';
 			if (a.url || !pick.active()) {
 				if (!a.url) throw new ToolError('url: the site to pick from (no picking session is open).');
 				const url = urlOf(a.url);
 				const o = await pick.open(url, { mode: a.mode });
-				return `The picker is open on ${url} in ${o.own ? 'your own Chrome (a new tab, or the one already on that site)' : 'a Chrome window site-prompt opened (sign in there once if the site needs it; it remembers)'}.
-
-Tell the person, in a few short lines: hover anything on the page (it says what it is: Button, Text, Illustration, Section); click what they like, optionally type what they like about it; ↑ picks the bigger thing around it, Esc pauses picking so they can use the site normally; then press Get prompts in the toolbar (bottom right). They can pick several things at once, and move to other pages.${o.own ? '' : `\nIf they want this in their own Chrome next time (their tabs and logins): turn on remote debugging at chrome://inspect/#remote-debugging (Chrome 144 or later).`}
-
-Then call site_pick with no url to wait for the picks.`;
+				opened = `Opened ${url} with the picker in ${o.own ? 'your own Chrome' : 'a Chrome window site-prompt opened (it remembers sign-ins)'}. `;
 			}
 			const batch = await pick.next(Math.min(600, Math.max(5, Number(a.wait) || 240)));
-			if (!batch) return 'Nothing picked yet; the picker is still open. Call site_pick again (no url) to keep waiting, or stop: true to close it.';
+			if (!batch) return `${opened}Nothing picked yet; the picker is still open. Call site_pick again right now (no url) to keep waiting. Do not end your turn or wait for the person to reply: they are picking in Chrome, and the picks arrive through site_pick.`;
 			const results = await pick.processBatch(batch, base());
 			const good = results.filter((x) => !x.error);
 			const all = good.map((x) => x.md).join('\n\n---\n\n');
 			const copied = good.length ? await clipboard(all) : false;
-			const out = [text(`${good.length} prompt${good.length === 1 ? '' : 's'} from ${batch.url}${copied ? ` (all ${good.length > 1 ? 'of them ' : ''}copied to the clipboard)` : ''}.${results.filter((x) => x.error).map((x) => `\nCould not read ${x.n} (${x.label}): ${x.error}`).join('')}
+			const out = [text(`${opened}${good.length} prompt${good.length === 1 ? '' : 's'} from ${batch.url}${copied ? ` (all ${good.length > 1 ? 'of them ' : ''}copied to the clipboard)` : ''}.${results.filter((x) => x.error).map((x) => `\nCould not read ${x.n} (${x.label}): ${x.error}`).join('')}
 
-Show the person each prompt below IN FULL inside its own \`\`\`markdown block, exactly as written, each followed by "Saved to [path](link)" and one line on how close the copy is. Keep your own words short. The picker stays open: they can pick more and press Get prompts again (call site_pick with no url to wait).`)];
+Show the person each prompt below IN FULL inside its own \`\`\`markdown block, exactly as written, each followed by "Saved to [path](link)" and one line on how close the copy is. Keep your own words short. The picker stays open: after showing them, call site_pick again (no url) to wait for more picks, until the person says they are done (then stop: true).`)];
 			for (const x of good) {
 				const file = path.join(x.dir, 'PROMPT.md');
 				const match = x.r.size.ok && (x.r.ssim >= 0.97 || x.r.diff <= 0.015);

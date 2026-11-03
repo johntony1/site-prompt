@@ -15,16 +15,12 @@ the result with the original until it matches. These tools do each part.
 
 ## A whole page
 
-1. `site_read` with the url. It opens the page in Chrome, scrolls it like a person, and measures everything. It
-   returns the stack, the tokens, the sections and a screenshot of every section, and writes
-   `~/Documents/Site Prompts/<site>/` (PROMPT.md, exact.html, spec.json, css/, shots/).
-2. Look at every section screenshot (and `shots/phone-full.jpg`). Then `site_prompt` with `notes` per section
-   number and an `overall` paragraph: only what the eye sees that the numbers miss (what the imagery shows, depth and
-   layering, glow, texture, illustration style, density). Factual; never invent copy, features or numbers.
-3. site_prompt returns the finished prompt, copies it to the clipboard and links the file. Show the person the
-   whole prompt in the chat in one markdown code block, exactly as returned, then the clickable link to the .md file,
-   then in one line what the site was built with (say plainly when the stack is a guess or a site builder) and how
-   to use it.
+`site_read` with the url. It opens the page in Chrome, scrolls it like a person, measures everything, writes
+`~/Documents/Site Prompts/<site>/` (PROMPT.md, exact.html, spec.json, css/, shots/), copies the prompt to the
+clipboard and returns it. In the same reply, show the whole prompt in one markdown code block exactly as returned,
+then the clickable link to PROMPT.md, then one line on what it was built with (say plainly when the stack is a guess
+or a site builder). Do not stop in between or ask anything first. Only if they ask to refine it later: `site_prompt`
+adds visual notes per section.
 
 If they ask you to build it too: build from PROMPT.md section by section, run it locally, then `site_compare` with
 the original and the local url. Fix the first failing band from the top, compare again, up to five rounds.
@@ -34,17 +30,16 @@ the original and the local url. Fix the first failing band from the top, compare
 When the person wants a part of a site (a button style, an illustration, a line of type, a section, any component),
 or says "pick", "hover", "point at":
 
-1. `site_pick` with the url. It opens the site with a picker toolbar: in their own Chrome when remote debugging is
-   on (chrome://inspect/#remote-debugging, Chrome 144+; Chrome asks them to allow it), else in a Chrome window
-   site-prompt opens (it keeps its own profile, so a sign-in stays). It returns at once.
-2. Tell them in a few short lines: hover anything (it says what it is), click what they like, optionally type what
-   they like about it, ↑ picks the bigger thing around it, Esc pauses picking so the site works normally, then
-   press Get prompts (bottom right). Several picks at once, on any page of the site.
-3. `site_pick` with no url waits for them (call it again if it times out; it keeps the session).
-4. Each pick comes back as a prompt with its exact code (markup and computed styles), its hover, focus and press
-   states, its type spec or its artwork, and a screenshot, saved in `~/Documents/Site Prompts/<site>/picks/` and
-   copied to the clipboard. Show every prompt in full in its own markdown block with its saved link, then wait
-   again for more picks. `stop: true` closes the picker.
+1. In one or two lines, tell them: hover anything on the page, click what you like (a note is optional), then press
+   Get prompts in the toolbar, bottom right.
+2. Call `site_pick` with the url. It opens the site with the picker (in their own Chrome when remote debugging is on
+   at chrome://inspect/#remote-debugging, else a Chrome window site-prompt opens) and waits in the same call for
+   their picks. If it comes back with nothing picked, call it again at once with no url: never end your turn to wait
+   for a reply, the picks arrive through site_pick.
+3. Each pick comes back as a prompt with its exact code, states, type spec or artwork, and a screenshot, saved in
+   `~/Documents/Site Prompts/<site>/picks/` and copied to the clipboard. Show every prompt in full in its own
+   markdown block with its saved link. Then call `site_pick` (no url) again to wait for more, until they say they
+   are done; then `stop: true`.
 
 One part by selector, without the person clicking: `site_component` with url and selector.
 

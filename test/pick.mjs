@@ -83,16 +83,17 @@ const hsend = (method, params = {}, sessionId) => new Promise((r) => { const id 
 
 try {
 	await rpc('initialize', { protocolVersion: '2025-06-18', clientInfo: { name: 'claude-code' }, capabilities: {} });
-	const opened = await call('site_pick', { url: URL0 });
-	check(!opened.error && /your own Chrome/.test(opened.words), 'site_pick opens in the own Chrome', opened.words.split('\n')[0]);
-
+	// one call opens the picker and waits for the picks
+	const pickCall = call('site_pick', { url: URL0, wait: 120 });
+	let tabInfo = null;
+	for (let k = 0; k < 100 && !tabInfo; k++) { tabInfo = (await hsend('Target.getTargets')).result.targetInfos.find((t) => t.type === 'page' && t.url.startsWith(URL0)); if (!tabInfo) await sleep(100); }
 	const { targetInfos } = (await hsend('Target.getTargets')).result;
 	const tab = targetInfos.find((t) => t.type === 'page' && t.url.startsWith(URL0));
 	check(!!tab, 'the site is open in a tab of that Chrome', tab?.url);
 	const sid = (await hsend('Target.attachToTarget', { targetId: tab.targetId, flatten: true })).result.sessionId;
 	await hsend('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sid);
 	const ev = async (expr) => (await hsend('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true }, sid)).result?.result?.value;
-	for (let k = 0; k < 50 && !(await ev('!!document.querySelector("site-prompt-ui")')); k++) await sleep(100);
+	for (let k = 0; k < 300 && !(await ev(`!!document.querySelector("site-prompt-ui") && !!window.__spTest`)); k++) await sleep(100);
 	check(await ev('!!document.querySelector("site-prompt-ui")'), 'the picker toolbar is on the page');
 	const center = (sel) => ev(`(() => { const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
 	const move = async (p) => { await hsend('Input.dispatchMouseEvent', { type: 'mouseMoved', x: p.x, y: p.y }, sid); await sleep(120); };
@@ -113,12 +114,11 @@ try {
 	const marked = await ev('[...document.querySelectorAll("[data-sp-pick]")].map((e) => e.tagName.toLowerCase())');
 	check(JSON.stringify(marked) === JSON.stringify(['h1', 'a', 'svg']), 'three picks: the headline, the button, the whole svg', marked);
 
-	const waitCall = call('site_pick', { wait: 120 });
-	await sleep(300);
 	await click(await ui('[data-a=send]'));
-	const r = await waitCall;
+	const r = await pickCall;
+	check(/your own Chrome/.test(r.words), 'it opened in the own Chrome, in the same call', r.words.split('\n')[0]);
 	writeFileSync(path.join(out, 'result.txt'), r.words);
-	check(!r.error && /^3 prompts/.test(r.words), 'Get prompts: three prompts come back', r.words.split('\n')[0]);
+	check(!r.error && /3 prompts from/.test(r.words), 'Get prompts: three prompts come back from that one call', r.words.split('\n')[0]);
 	const md = (kind) => r.texts.find((t) => t.startsWith(`# Build this ${kind}`)) ?? '';
 	const btn = md('button'), txt = md('text'), art = md('illustration');
 	check(/What I want from it:\*\* the soft inner highlight/.test(btn), 'the button prompt carries the note');

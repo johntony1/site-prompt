@@ -124,6 +124,7 @@ try {
 	const r = await call('site_read', { url: URL0 });
 	writeFileSync(path.join(out, 'read.txt'), r.words);
 	check(!r.error, `site_read (${Math.round(r.ms / 1000)} s)`, r.error ? r.words.slice(0, 400) : undefined);
+	check(/THE PROMPT IS READY/.test(r.words) && r.words.includes('# Rebuild 127.0.0.1') && r.words.includes('Ship faster with Orbit'), 'site_read returns the finished prompt in the same step');
 	const dir = path.join(work, '127.0.0.1-' + site.address().port);
 	const spec = JSON.parse(readFileSync(path.join(dir, 'spec.json'), 'utf8'));
 	check(/Next\.js/.test(spec.stack.framework ?? '') && spec.stack.hosting === 'Vercel', 'stack: Next.js on Vercel', { framework: spec.stack.framework, hosting: spec.stack.hosting });
