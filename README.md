@@ -5,11 +5,11 @@ copy of the page, and a check that your rebuild matches. Click any part of a pag
 
 A Claude Code (and Codex) plugin. Plain Node 22+ and the Chrome already on your machine; nothing to install.
 
-    /plugin marketplace add <this repo>
-    /plugin install site-prompt@site-prompt
+    sh install.sh                       # then, in any Claude Code session:
+    /site-prompt https://linear.app
+    /site-prompt component https://stripe.com
 
-    /site-prompt:prompt https://linear.app
-    /site-prompt:component https://stripe.com
+(Or as a plugin: /plugin marketplace add <this repo>, then /site-prompt:prompt <link>.)
 
 ## What you get
 
