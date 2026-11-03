@@ -45,13 +45,22 @@ export function overlay() {
 			<div class="mark"><svg viewBox="0 0 16 16" fill="none"><path d="M3 2.5l9.5 5-4 1.2-1.6 4.3L3 2.5z" fill="#fff"/></svg></div>
 			<button class="btn on" data-a="pick">Pick</button>
 			<span class="count">0</span>
-			<button class="btn primary" data-a="send" disabled>Get prompts</button>
+			<button class="btn" data-a="send" disabled>Get prompts</button>
+			<button class="btn primary" data-a="add" disabled hidden>Add to project</button>
 			<span class="status" hidden></span>
 		</div>`;
 		document.documentElement.appendChild(host);
 		const $ = (s) => root.querySelector(s);
 		const hl = $('.hl'), chip = $('.chip'), marks = $('.marks'), pop = $('.pop'), note = $('textarea'), hint = $('.hint');
-		const pickBtn = $('[data-a=pick]'), sendBtn = $('[data-a=send]'), count = $('.count'), status = $('.status');
+		const pickBtn = $('[data-a=pick]'), sendBtn = $('[data-a=send]'), addBtn = $('[data-a=add]'), count = $('.count'), status = $('.status');
+		const proj = window.__spProject;
+		if (proj) {
+			// building something: adding it is the main action, a prompt the other
+			addBtn.hidden = false;
+			addBtn.textContent = `Add to ${proj.name.length > 18 ? 'project' : proj.name}`;
+			note.placeholder = 'What do you like, or where should it go? (optional)';
+			hint.textContent = 'Hover anything you like, click to pick it, then add it to your project';
+		} else sendBtn.classList.add('primary');
 		let picking = true, cur = null, open = null, n = +(sessionStorage.getItem('__spN') || 0);
 		const picks = [];
 		setTimeout(() => (hint.style.opacity = '0'), 6000);
@@ -102,7 +111,7 @@ export function overlay() {
 				marks.append(ring, b);
 			}
 			count.textContent = String(picks.length);
-			sendBtn.disabled = !picks.length;
+			sendBtn.disabled = addBtn.disabled = !picks.length;
 		};
 		const loop = () => { if (picks.length) redraw(); if (cur && picking) show(); requestAnimationFrame(loop); };
 		requestAnimationFrame(loop);
@@ -154,17 +163,19 @@ export function overlay() {
 			if (a === 'pick') setPicking(!picking);
 			if (a === 'done') closePop();
 			if (a === 'remove' && open) { open.el.removeAttribute('data-sp-pick'); picks.splice(picks.indexOf(open), 1); open = null; pop.style.display = 'none'; redraw(); }
-			if (a === 'send' && picks.length) {
+			if ((a === 'send' || a === 'add') && picks.length) {
 				closePop();
 				const batch = picks.filter((p) => document.contains(p.el)).map((p) => ({ n: p.n, kind: p.kind, label: p.label, note: p.note }));
 				picks.length = 0;
 				redraw();
-				status.textContent = `Sent ${batch.length}. Writing the prompt${batch.length > 1 ? 's' : ''}…`;
+				status.textContent = a === 'add' ? `Sent ${batch.length}. Adding to ${proj?.name ?? 'your project'}…` : `Sent ${batch.length}. Writing the prompt${batch.length > 1 ? 's' : ''}…`;
 				status.hidden = false;
-				window.__spSend?.(JSON.stringify({ url: location.href, title: document.title, picks: batch }));
+				window.__spSend?.(JSON.stringify({ url: location.href, title: document.title, picks: batch, action: a === 'add' ? 'add' : 'prompt' }));
 			}
 		});
 		window.__spStatus = (t) => { status.textContent = t; status.hidden = !t; };
+		// out of every screenshot of a pick (the highlight would tint it)
+		window.__spHide = (v) => { host.style.display = v ? 'none' : ''; };
 		window.__spTest = { rect: (sel) => { const r = root.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, note: (t) => { note.value = t; }, status: () => (status.hidden ? '' : status.textContent) };
 	};
 	start();

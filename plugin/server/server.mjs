@@ -13,6 +13,8 @@ import { compose } from './prompt.mjs';
 import { read } from './read.mjs';
 import { buildStack } from './stack.mjs';
 import * as pick from './pick.mjs';
+import { project } from './project.mjs';
+import { match } from './match.mjs';
 
 const VERSION = '0.1.0';
 // everything lands in the person's Documents, one folder per site (the prompt with its reference files beside it)
@@ -139,9 +141,30 @@ Show the person, in this order:
 			if (!batch) return `${opened}Nothing picked yet; the picker is still open. Call site_pick again right now (no url) to keep waiting. Do not end your turn or wait for the person to reply: they are picking in Chrome, and the picks arrive through site_pick.`;
 			const results = await pick.processBatch(batch, base());
 			const good = results.filter((x) => !x.error);
+			const failed = results.filter((x) => x.error).map((x) => `\nCould not read ${x.n} (${x.label}): ${x.error}`).join('');
+			const proj = project();
+			if (batch.action === 'add' && good.length) {
+				// building: the agent puts each pick into the project itself; no prompts to copy around
+				const out = [text(`${opened}ADD TO THE PROJECT: the person picked ${good.length} thing${good.length > 1 ? 's' : ''} on ${batch.url} and wants ${good.length > 1 ? 'them' : 'it'} in ${proj ? `their project "${proj.name}" (${proj.dir.replace(os.homedir(), '~')}): ${proj.framework}, ${proj.styling}${proj.ts ? ', TypeScript' : ''}${proj.motion.length ? `, ${proj.motion.join(', ')}` : ''}${proj.components ? `; components live in ${proj.components}/` : ''}` : 'the project in the current folder'}.${failed}
+
+Do it now, for each pick below:
+1. Read its PROMPT.md and component.html (paths below): the exact markup, every computed style, states, fonts. Look at its screenshot.
+2. Build it as a component in this project, following its conventions (folder, naming, ${proj?.ts ? 'TypeScript, ' : ''}${proj?.styling ?? 'its styling'}). Keep every value exact: sizes, spacing, colours, radius, shadows, type, transitions, hover/focus/press states. ${/Tailwind/.test(proj?.styling ?? '') ? 'In Tailwind use arbitrary values (e.g. rounded-[12px], shadow-[...]) where no utility is the same value; never round to the nearest utility. ' : ''}Add the font if the project lacks it (or the closest free match, and say so). Replace their copy and logo with the person's own when it is obvious; otherwise keep the copy as a placeholder and say so.
+3. Put it where the person's note says. With no note, add it as a component and ask in one line where it should go.
+4. If the dev server is running, check it: site_match with the pick folder, the local url, and a selector for your component. Fix what it flags (at most three rounds).
+Then tell the person in a few lines what you added, where, and how close the match is. The picker stays open: call site_pick again (no url) to wait for more.`)];
+				for (const x of good) {
+					out.push(text(`── ${x.n}. ${x.label}${x.note ? ` · note: "${x.note}"` : ''}
+Folder: ${x.dir}
+PROMPT.md: ${path.join(x.dir, 'PROMPT.md')} · component.html: ${x.r.file}
+${x.r.size.original.join('×')} px · ${x.r.snap.nodes} elements · ${x.r.stateRules.length} state rules · fonts: ${x.r.code.fonts.map((f) => f.family).join(', ') || 'system'}`));
+					if (existsSync(path.join(x.dir, 'original.png'))) out.push(image(readFileSync(path.join(x.dir, 'original.png')), 'image/png'));
+				}
+				return out;
+			}
 			const all = good.map((x) => x.md).join('\n\n---\n\n');
 			const copied = good.length ? await clipboard(all) : false;
-			const out = [text(`${opened}${good.length} prompt${good.length === 1 ? '' : 's'} from ${batch.url}${copied ? ` (all ${good.length > 1 ? 'of them ' : ''}copied to the clipboard)` : ''}.${results.filter((x) => x.error).map((x) => `\nCould not read ${x.n} (${x.label}): ${x.error}`).join('')}
+			const out = [text(`${opened}${good.length} prompt${good.length === 1 ? '' : 's'} from ${batch.url}${copied ? ` (all ${good.length > 1 ? 'of them ' : ''}copied to the clipboard)` : ''}.${failed}
 
 Show the person each prompt below IN FULL inside its own \`\`\`markdown block, exactly as written, each followed by "Saved to [path](link)" and one line on how close the copy is. Keep your own words short. The picker stays open: after showing them, call site_pick again (no url) to wait for more picks, until the person says they are done (then stop: true).`)];
 			for (const x of good) {
@@ -153,6 +176,30 @@ Copy check: ${match ? 'matches the original' : 'close, not exact'} (${(x.r.diff 
 				out.push(text(x.md));
 				for (const f of ['original.png', 'original-hover.png']) if (existsSync(path.join(x.dir, f))) out.push(image(readFileSync(path.join(x.dir, f)), 'image/png'));
 			}
+			return out;
+		},
+	},
+	{
+		name: 'site_match',
+		description: 'Check a component you built against the one the person picked: screenshots it in their running app (the local url and a CSS selector for it) and compares it with the original, aligned to the pixel. Returns the difference and, when it is off, a sheet of original | yours | difference (bright = different). Use after adding a pick to the project.',
+		inputSchema: {
+			type: 'object', required: ['pick', 'url', 'selector'],
+			properties: {
+				pick: { type: 'string', description: 'the pick folder (from site_pick)' },
+				url: { type: 'string', description: 'where the component renders, e.g. http://localhost:3000/pricing' },
+				selector: { type: 'string', description: 'a CSS selector for your component on that page' },
+				hover: { type: 'boolean', description: 'compare the hover state instead (needs original-hover.png)' },
+			},
+		},
+		run: async (a) => {
+			const dir = String(a.pick).replace(/^~/, os.homedir());
+			const orig = path.join(dir, 'original-tight.png');
+			if (!existsSync(orig)) throw new ToolError(`pick: ${a.pick} is not a pick folder (no original-tight.png). Use the Folder path site_pick gave.`);
+			const r = await match(orig, urlOf(a.url), String(a.selector));
+			const pct = (r.diff * 100).toFixed(1);
+			const ok = r.sizeOk && (r.ssim >= 0.97 || r.diff <= 0.015);
+			const out = [text(`${ok ? 'It matches the original' : 'Not there yet'}: ${pct}% pixel difference, SSIM ${r.ssim}; size original ${r.original.join('×')}, yours ${r.yours.join('×')}${r.sizeOk ? '' : ' ✗ (size differs: fix width, height, padding or font metrics first)'}.${ok ? ' Tell the person.' : ' The sheet is original | yours | difference: fix what is bright, then check again (at most three rounds).'}`)];
+			if (!ok) out.push(image(r.sheet));
 			return out;
 		},
 	},

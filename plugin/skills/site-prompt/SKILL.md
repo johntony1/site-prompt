@@ -1,6 +1,6 @@
 ---
 name: site-prompt
-description: "Turn any website, or any part of one, into a build prompt precise enough to rebuild it 1:1: layout, spacing, type, colours, depth, copy, hover states, scroll motion and the stack it was built with, all measured from the live page in Chrome, with screenshots, and a check that the rebuild matches. Use when the user pastes a site or landing page link and wants it cloned, recreated, rebuilt or turned into a prompt, wants one component (a button, card, nav, hero, pricing table) copied exactly, or wants a rebuild compared with the original."
+description: "Turn any website, or any part of one, into a build prompt precise enough to rebuild it 1:1: layout, spacing, type, colours, depth, copy, hover states, scroll motion and the stack it was built with, all measured from the live page in Chrome, with screenshots, and a check that the rebuild matches. Use when the user pastes a site or landing page link and wants it cloned, recreated, rebuilt or turned into a prompt, wants one component (a button, card, nav, hero, pricing table) copied exactly, wants a component from another site added to the project they are building ("grab that pricing card from Linear", "add Stripe's button to my site"), or wants a rebuild compared with the original."
 license: MIT
 compatibility: Claude Code or Codex with the site-prompt MCP server. Node 22+ and Google Chrome (or Chromium, Edge, Brave).
 metadata:
@@ -40,6 +40,20 @@ or says "pick", "hover", "point at":
    `~/Documents/Site Prompts/<site>/picks/` and copied to the clipboard. Show every prompt in full in its own
    markdown block with its saved link. Then call `site_pick` (no url) again to wait for more, until they say they
    are done; then `stop: true`.
+
+## While they build: add it to their project
+
+When the person is working in a project (the folder you run in has a package.json or an index.html) and wants
+something from another site in it ("grab Linear's pricing card", "I want that button on my landing page"):
+
+1. Pick mode as above. The toolbar then offers **Add to <project>** next to Get prompts, and the note box asks
+   where it should go. Tell them they can click several things and say where each goes in the note.
+2. When they press Add, `site_pick` returns ADD TO THE PROJECT with each pick's folder (PROMPT.md, component.html,
+   screenshots) and the project's stack. Build each one into their code in their conventions with the exact values,
+   place it where the note says (ask in one line if it says nothing), then `site_match` it against the pick in
+   their running dev server and fix what it flags. Report in a few lines; do not paste the prompts.
+3. If they named the site and the thing in words and you can find it yourself, `site_component` with a selector
+   gets the same folder without them picking; then build it in the same way.
 
 One part by selector, without the person clicking: `site_component` with url and selector.
 

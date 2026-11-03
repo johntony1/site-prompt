@@ -44,10 +44,16 @@ const URL0 = `http://127.0.0.1:${site.address().port}/`;
 
 // "their" Chrome, remote debugging on
 const chrome = spawn(findChrome(), ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--window-size=1440,900', '--force-color-profile=srgb', 'about:blank'], { stdio: 'ignore' });
-for (let k = 0; k < 100 && !existsSync(path.join(profile, 'DevToolsActivePort')); k++) await sleep(100);
+for (let k = 0; k < 300 && !existsSync(path.join(profile, 'DevToolsActivePort')); k++) await sleep(100);
 check(existsSync(path.join(profile, 'DevToolsActivePort')), 'the own Chrome is listening (DevToolsActivePort)');
 
-const proc = spawn('node', [server], { env: { ...process.env, SITE_PROMPT_OUT: work, SITE_PROMPT_CHROME_DIR: profile, SITE_PROMPT_NO_CLIPBOARD: '1' }, stdio: ['pipe', 'pipe', 'inherit'] });
+// the person is building a Next.js + Tailwind site
+const proj = mkdtempSync(path.join(os.tmpdir(), 'site-prompt-proj-'));
+writeFileSync(path.join(proj, 'package.json'), JSON.stringify({ name: 'my-launch', scripts: { dev: 'next dev' }, dependencies: { next: '15.2.0', react: '19.0.0' }, devDependencies: { tailwindcss: '4.1.0' } }));
+writeFileSync(path.join(proj, 'tsconfig.json'), '{}');
+mkdirSync(path.join(proj, 'src', 'components'), { recursive: true });
+mkdirSync(path.join(proj, 'src', 'app'), { recursive: true });
+const proc = spawn('node', [server], { cwd: proj, env: { ...process.env, SITE_PROMPT_OUT: work, SITE_PROMPT_CHROME_DIR: profile, SITE_PROMPT_NO_CLIPBOARD: '1' }, stdio: ['pipe', 'pipe', 'inherit'] });
 let buf = '', seq = 0;
 const waiting = new Map();
 proc.stdout.on('data', (d) => {
@@ -131,6 +137,35 @@ try {
 	check(r.images >= 4, 'with screenshots (and the hover state)', r.images);
 	check(/3 prompts ready in your agent/.test(await ev('window.__spTest.status()')), 'the toolbar says the prompts are ready', await ev('window.__spTest.status()'));
 	check(!(await ev('document.querySelectorAll("[data-sp-pick],[data-sp-n]").length')), 'the page is left clean');
+	// 4. building: the toolbar offers Add to my-launch; the agent is told to build it into the project
+	check(await ev(`(() => { const r = window.__spTest.rect('[data-a=add]'); return r.x > 0; })()`), 'the toolbar offers Add to the project');
+	const addCall = call('site_pick', { wait: 120 });
+	await sleep(200);
+	await click(await center('.cta'));
+	await ev('window.__spTest.note("put it in the hero of my landing page")');
+	await click(await ui('[data-a=done]'));
+	await click(await ui('[data-a=add]'));
+	const add = await addCall;
+	writeFileSync(path.join(out, 'add.txt'), add.words);
+	check(/ADD TO THE PROJECT/.test(add.words) && /my-launch/.test(add.words) && /Next\.js \(App Router\), Tailwind 4, TypeScript/.test(add.words) && /src\/components/.test(add.words), 'Add: the agent is told to build it into the project, in its stack', add.words.split('\n')[0]);
+	check(/arbitrary values/.test(add.words) && /note: "put it in the hero/.test(add.words) && !/# Build this/.test(add.words), 'with Tailwind guidance and the note, and no prompt dump');
+	check(/Your agent is adding it/.test(await ev('window.__spTest.status()')), 'the toolbar says it is being added', await ev('window.__spTest.status()'));
+
+	// 5. site_match: the person's build in their running app against the original
+	const folder = add.words.match(/Folder: (.+)/)[1].trim();
+	const comp = readFileSync(path.join(folder, 'component.html'), 'utf8');
+	const app = http.createServer((req, res) => {
+		res.writeHead(200, { 'content-type': 'text/html' });
+		res.end(req.url === '/bad' ? comp.replace('</style>', '.c0{border-radius:0!important;padding:0 40px!important}</style>') : comp);
+	});
+	await new Promise((r) => app.listen(0, '127.0.0.1', r));
+	const local = `http://127.0.0.1:${app.address().port}`;
+	const good = await call('site_match', { pick: folder, url: local + '/good', selector: '.c0' });
+	check(/^It matches the original/.test(good.words), 'site_match: a faithful build matches', good.words.split('\n')[0]);
+	const bad = await call('site_match', { pick: folder, url: local + '/bad', selector: '.c0' });
+	check(/^Not there yet/.test(bad.words) && bad.images === 1, 'site_match: a build that is off is flagged, with a sheet', bad.words.split('\n')[0]);
+	app.close();
+
 	const stopped = await call('site_pick', { stop: true });
 	check(/Closed/.test(stopped.words) && !(await ev('!!document.querySelector("site-prompt-ui")')), 'stop removes the picker and leaves their Chrome open');
 } finally {

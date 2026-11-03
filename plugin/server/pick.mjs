@@ -12,6 +12,7 @@ import { connectOwn, goto, launch, ownChrome, wait } from './chrome.mjs';
 import { extract } from './component.mjs';
 import { ToolError } from './mcp.mjs';
 import { details, overlay } from './overlay.mjs';
+import { project } from './project.mjs';
 
 let session = null; // { page, close, own, url, queue, waiter }
 
@@ -35,7 +36,9 @@ export async function open(url, { mode = 'auto', log = () => {} } = {}) {
 		try { s.queue.push(JSON.parse(e.payload)); } catch { return; }
 		s.waiter?.();
 	});
-	const src = `(${overlay.toString()})()`;
+	// building a project? the toolbar offers to add picks straight to it
+	const proj = project();
+	const src = `window.__spProject = ${JSON.stringify(proj ? { name: proj.name } : null)}; (${overlay.toString()})()`;
 	await s.page.send('Page.addScriptToEvaluateOnNewDocument', { source: src });
 	await s.page.eval(src);
 	s.page.router?.on?.('close', () => { if (session === s) session = null; });
@@ -78,7 +81,8 @@ export async function processBatch(batch, baseDir, { log = () => {} } = {}) {
 		mkdirSync(dir, { recursive: true });
 		await s.page.eval(`window.__spStatus?.(${JSON.stringify(`Reading ${p.n}. ${p.label}…`)})`).catch(() => {});
 		try {
-			const r = await extract(s.page, sel, dir, batch.url, { own: s.own, log });
+			await s.page.eval('window.__spHide?.(true)').catch(() => {});
+			const r = await extract(s.page, sel, dir, batch.url, { own: s.own, log }).finally(() => s.page.eval('window.__spHide?.(false)').catch(() => {}));
 			let asset = null;
 			if (d.art?.src && /^https?:/.test(d.art.src) && d.art.kind !== 'video') asset = await download(d.art.src, dir, batch.url);
 			const md = pickPrompt({ pick: p, d, r, url: batch.url, asset, dir });
@@ -90,7 +94,8 @@ export async function processBatch(batch, baseDir, { log = () => {} } = {}) {
 		await s.page.eval(`document.querySelector(${JSON.stringify(sel)})?.removeAttribute('data-sp-pick')`).catch(() => {});
 	}
 	const ok = out.filter((x) => !x.error).length;
-	await s.page.eval(`window.__spStatus?.(${JSON.stringify(ok ? `✓ ${ok} prompt${ok > 1 ? 's' : ''} ready in your agent` : 'Could not read those. Try again.')})`).catch(() => {});
+	const done = !ok ? 'Could not read those. Try again.' : batch.action === 'add' ? `✓ Your agent is adding ${ok === 1 ? 'it' : `all ${ok}`} to your project` : `✓ ${ok} prompt${ok > 1 ? 's' : ''} ready in your agent`;
+	await s.page.eval(`window.__spStatus?.(${JSON.stringify(done)})`).catch(() => {});
 	return out;
 }
 

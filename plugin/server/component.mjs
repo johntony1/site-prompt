@@ -251,6 +251,8 @@ export async function extract(page, sel, outDir, url, { log = () => {}, own = fa
 		await wait(80);
 		const restPng = await shot(page, { beyond: !own, ...clip, format: 'png' });
 		writeFileSync(path.join(outDir, 'original.png'), await shot(page, { beyond: !own, ...padded, format: 'png' }));
+		writeFileSync(path.join(outDir, 'original-tight.png'), restPng); // the element alone: what site_match compares a rebuild with
+		writeFileSync(path.join(outDir, 'pick.json'), JSON.stringify({ url, box: snap.box, tag: snap.tag, text: snap.text }));
 		const { root } = await page.send('DOM.getDocument', { depth: 0 });
 		const states = {}, stateRules = [];
 		for (const i of snap.interactive) {

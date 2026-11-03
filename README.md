@@ -38,12 +38,20 @@ the chat, saved under `picks/`, and copied to the clipboard.
 No extension and no app: it runs in **your own Chrome** when remote debugging is on (`chrome://inspect/#remote-debugging`,
 Chrome 144 or later; Chrome asks you to allow each session), and otherwise in a Chrome window it opens for you.
 
+## While you build
+
+Run it inside your project and the toolbar also offers **Add to <your project>**. Pick the button, card or section
+you like (the note box takes "put it on my pricing page"), press Add, and your agent builds it into your code in
+your stack (Next.js, React, Vue, Svelte, Tailwind, TypeScript...) with the original's exact values, then checks it
+in your running dev server against the original with `site_match` and fixes what is off.
+
 ## Tools
 
 - `site_read`: read and measure a page, write the folder above.
 - `site_prompt`: add the agent's visual notes per section to PROMPT.md.
 - `site_pick`: pick mode (above).
 - `site_component`: clone one component by selector.
+- `site_match`: check a component you built (local url + selector) against the one you picked.
 - `site_compare`: score a rebuild against the original, band by band, with original | clone | difference sheets.
 
 ## Limits
