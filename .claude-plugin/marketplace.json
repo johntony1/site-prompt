@@ -1,0 +1,11 @@
+{
+	"name": "site-prompt",
+	"owner": { "name": "site-prompt" },
+	"plugins": [
+		{
+			"name": "site-prompt",
+			"source": "./plugin",
+			"description": "Paste any website and get a prompt that rebuilds it 1:1. Click any component to clone it exactly."
+		}
+	]
+}

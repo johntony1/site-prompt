@@ -1,0 +1,21 @@
+{
+	"name": "site-prompt",
+	"displayName": "Site Prompt",
+	"version": "0.1.0",
+	"description": "Paste any website and get a prompt that rebuilds it 1:1, measured from the live page: layout, type, colours, depth, copy, hover and scroll motion, and the stack it was built with. Click any component to clone it exactly. Compare the rebuild with the original.",
+	"license": "MIT",
+	"keywords": [
+		"website",
+		"clone",
+		"prompt",
+		"design to code",
+		"landing page",
+		"component",
+		"tailwind",
+		"next.js"
+	],
+	"author": {
+		"name": "johntony1",
+		"url": "https://github.com/johntony1"
+	}
+}

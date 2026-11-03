@@ -1,0 +1,4 @@
+test/out/
+site-prompts/
+node_modules/
+.DS_Store
