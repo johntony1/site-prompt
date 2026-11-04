@@ -79,6 +79,11 @@ kbd{font:500 10.5px/1 ui-sans-serif,-apple-system,system-ui,sans-serif;color:var
 .btn.ghost:hover{color:var(--danger);background:rgba(235,87,87,.08)}
 .btn.done{height:26px;padding:0 4px 0 9px;gap:6px;font-size:12px;color:var(--text);background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px var(--line)}
 .btn.done:hover{background:rgba(255,255,255,.09)}
+.go{display:flex;gap:4px}
+.pop .btn.done{background:var(--accent2);color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 0 0 1px rgba(0,0,0,.25)}
+.pop .btn.done:hover{background:#6b76db}
+.pop .btn.done kbd{background:rgba(255,255,255,.14);color:rgba(255,255,255,.85);box-shadow:none}
+.btn.ghost-n{height:26px;padding:0 9px;font-size:12px;color:var(--text2);box-shadow:inset 0 0 0 1px var(--line)}
 .btn.done kbd{background:rgba(255,255,255,.06)}
 
 .hint{position:fixed;left:50%;bottom:78px;transform:translateX(-50%);pointer-events:none;display:flex;align-items:center;gap:8px;height:34px;padding:0 14px;border-radius:10px;font-size:12.5px;color:var(--text2);white-space:nowrap;transition:opacity .3s}

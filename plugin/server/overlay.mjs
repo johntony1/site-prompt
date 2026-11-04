@@ -18,7 +18,7 @@ export function overlay() {
 			<div class="head k"></div><div class="rule"></div>
 			<textarea placeholder="What do you like about it? (optional)" rows="2"></textarea>
 			<div class="rule"></div>
-			<div class="foot"><button class="btn ghost" data-a="remove">${window.__spIcons?.trash ?? ''}Remove</button><button class="btn done" data-a="done">Done <kbd>↵</kbd></button></div></div>
+			<div class="foot"><button class="btn ghost" data-a="remove">${window.__spIcons?.trash ?? ''}Remove</button><span class="go"><button class="btn ghost-n" data-a="add" hidden>Add</button><button class="btn done" data-a="send">Get prompt <kbd>↵</kbd></button></span></div></div>
 		<div class="bar surface">
 			<div class="mark">${window.__spIcons?.cursor ?? ''}</div>
 			<button class="btn on" data-a="pick" title="Pick (Esc)">${window.__spIcons?.pick ?? ''}Pick<span class="count">0</span></button>
@@ -32,12 +32,13 @@ export function overlay() {
 		document.documentElement.appendChild(host);
 		const $ = (s) => root.querySelector(s);
 		const hl = $('.hl'), chip = $('.chip'), marks = $('.marks'), pop = $('.pop'), note = $('textarea'), hint = $('.hint');
-		const clearBtn = $('[data-a=clear]'), bar = $('.bar'), pickBtn = $('[data-a=pick]'), sendBtn = $('[data-a=send]'), addBtn = $('[data-a=add]'), count = $('.count'), status = $('.status');
+		const clearBtn = $('[data-a=clear]'), bar = $('.bar'), pickBtn = $('[data-a=pick]'), sendBtn = $('.bar [data-a=send]'), addBtn = $('.bar [data-a=add]'), count = $('.count'), status = $('.status');
 		const proj = window.__spProject;
 		if (proj) {
 			// building something: adding it is the main action, a prompt the other
 			addBtn.hidden = false;
 				$('.seg').hidden = false;
+				$('.go [data-a=add]').hidden = false;
 			addBtn.innerHTML = `${window.__spIcons?.add ?? ''}Add to ${(proj.name.length > 18 ? 'project' : proj.name).replace(/</g, '&lt;')}`;
 			note.placeholder = 'What you like, or where it goes (optional)';
 			hint.innerHTML = '<b>Hover</b> anything you like, <b>click</b> to pick it (again to deselect), then <b>Add</b> it to your project';
@@ -161,10 +162,22 @@ export function overlay() {
 			openPop(p);
 		}, true);
 		addEventListener('keydown', (e) => {
-			if (open && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); closePop(); return; }
+			if (open && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send('send'); return; }
 			if (e.key === 'Escape') { e.preventDefault(); if (open) closePop(); else setPicking(!picking); return; }
 			if (picking && !open && e.key === 'ArrowUp' && cur?.parentElement && cur.parentElement !== document.body) { e.preventDefault(); cur = cur.parentElement; show(); }
 		}, true);
+		const send = (a) => {
+			closePop();
+			if (!picks.length) return;
+			const batch = picks.filter((p) => document.contains(p.el)).map((p) => ({ n: p.n, kind: p.kind, label: p.label, note: p.note }));
+			picks.length = 0;
+			redraw();
+			status.textContent = a === 'add' ? `Sent ${batch.length}. Adding to ${proj?.name ?? 'your project'}…` : `Sent ${batch.length}. Writing the prompt${batch.length > 1 ? 's' : ''}…`;
+			status.hidden = false;
+			status.classList.remove('ok');
+			bar.classList.add('busy');
+			window.__spSend?.(JSON.stringify({ url: location.href, title: document.title, picks: batch, action: a === 'add' ? 'add' : 'prompt', style }));
+		};
 		root.addEventListener('click', (e) => {
 			const badge = e.target.closest('.badge');
 				if (badge) { const p = picks.find((x) => x.n === +badge.dataset.n); if (p) { closePop(); openPop(p); } return; }
@@ -172,25 +185,14 @@ export function overlay() {
 				if (sb) return setStyle(sb.dataset.s);
 				const a = e.target.closest('[data-a]')?.getAttribute('data-a');
 			if (a === 'pick') setPicking(!picking);
-			if (a === 'done') closePop();
 			if (a === 'remove' && open) unpick(open);
 				if (a === 'clear') { for (const p of [...picks]) unpick(p); status.hidden = true; }
-			if ((a === 'send' || a === 'add') && picks.length) {
-				closePop();
-				const batch = picks.filter((p) => document.contains(p.el)).map((p) => ({ n: p.n, kind: p.kind, label: p.label, note: p.note }));
-				picks.length = 0;
-				redraw();
-				status.textContent = a === 'add' ? `Sent ${batch.length}. Adding to ${proj?.name ?? 'your project'}…` : `Sent ${batch.length}. Writing the prompt${batch.length > 1 ? 's' : ''}…`;
-				status.hidden = false;
-				status.classList.remove('ok');
-				bar.classList.add('busy');
-				window.__spSend?.(JSON.stringify({ url: location.href, title: document.title, picks: batch, action: a === 'add' ? 'add' : 'prompt', style }));
-			}
+			if (a === 'send' || a === 'add') send(a);
 		});
 		window.__spStatus = (t) => { const ok = /^✓/.test(t || ''); status.textContent = ok ? t.replace(/^✓\s*/, '') : t; status.hidden = !t; status.classList.toggle('ok', ok); bar.classList.toggle('busy', !!t && !ok && !/^Could not/.test(t)); };
 		// out of every screenshot of a pick (the highlight would tint it)
 		window.__spHide = (v) => { host.style.display = v ? 'none' : ''; };
-		window.__spTest = { rect: (sel) => { const r = root.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, note: (t) => { note.value = t; }, style: setStyle, clear: () => (clearBtn.hidden ? '' : clearBtn.textContent), status: () => (status.hidden ? '' : status.textContent) };
+		window.__spTest = { rect: (sel) => { const r = root.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, note: (t) => { note.value = t; }, keep: () => closePop(), style: setStyle, clear: () => (clearBtn.hidden ? '' : clearBtn.textContent), status: () => (status.hidden ? '' : status.textContent) };
 	};
 	start();
 }

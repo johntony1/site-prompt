@@ -123,11 +123,11 @@ try {
 	// 0. deselecting: click a pick again; Clear all
 	const picked = () => ev('document.querySelectorAll("[data-sp-pick]").length');
 	await click(await center('.cta'));
-	await click(await ui('[data-a=done]'));
+	await ev('window.__spTest.keep()');
 	await click(await center('.cta'));
 	check(await picked() === 0, 'clicking a pick again deselects it');
-	await click(await center('.cta')); await click(await ui('[data-a=done]'));
-	await click(await center('h1')); await click(await ui('[data-a=done]'));
+	await click(await center('.cta')); await ev('window.__spTest.keep()');
+	await click(await center('h1')); await ev('window.__spTest.keep()');
 	check(await picked() === 2 && /Clear all/.test(await ev('window.__spTest.clear()')), 'two picks: the toolbar offers Clear all');
 	await click(await ui('[data-a=clear]'));
 	check(await picked() === 0 && await ev('window.__spTest.clear()') === '', 'Clear all deselects everything');
@@ -135,17 +135,17 @@ try {
 	await click(await center('.cta'));
 	check(await ev('location.href') === URL0, 'clicking a link while picking does not follow it');
 	await ev('window.__spTest.note("the soft inner highlight and the shadow")');
-	await click(await ui('[data-a=done]'));
+	await ev('window.__spTest.keep()');
 	// 2. the headline
 	await click(await center('h1'));
-	await click(await ui('[data-a=done]'));
+	await ev('window.__spTest.keep()');
 	// 3. a part of the drawing (the small dot): the whole svg is picked
 	await click(await ev(`(() => { const r = document.querySelectorAll('svg circle')[2].getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`));
-	await click(await ui('[data-a=done]'));
+	await ev('window.__spTest.keep()');
 	const marked = await ev('[...document.querySelectorAll("[data-sp-pick]")].map((e) => e.tagName.toLowerCase())');
 	check(JSON.stringify(marked) === JSON.stringify(['h1', 'a', 'svg']), 'three picks: the headline, the button, the whole svg', marked);
 
-	await click(await ui('[data-a=send]'));
+	await click(await ui('.bar [data-a=send]'));
 	const r = await pickCall;
 	check(/your own Chrome/.test(r.words), 'it opened in the own Chrome, in the same call', r.words.split('\n')[0]);
 	writeFileSync(path.join(out, 'result.txt'), r.words);
@@ -164,16 +164,24 @@ try {
 	check(r.images >= 4, 'with screenshots (and the hover state)', r.images);
 	check(/3 prompts ready in your agent/.test(await ev('window.__spTest.status()')), 'the toolbar says the prompts are ready', await ev('window.__spTest.status()'));
 	check(!(await ev('document.querySelectorAll("[data-sp-pick],[data-sp-n]").length')), 'the page is left clean');
+	// 3b. one pick, a note, Get prompt in the card: it goes at once, no trip to the toolbar
+	const quickCall = call('site_pick', { wait: 120 });
+	await sleep(200);
+	await click(await center('h1'));
+	await ev('window.__spTest.note("just the type")');
+	await click(await ui('.pop [data-a=send]'));
+	const quick = await quickCall;
+	check(/1 prompt from/.test(quick.words) && /just the type/.test(quick.words), 'Get prompt in the note card sends it straight away', quick.words.split('\n')[0]);
 	// 4. building: the toolbar offers Add to my-launch; the agent is told to build it into the project
-	check(await ev(`(() => { const r = window.__spTest.rect('[data-a=add]'); return r.x > 0; })()`), 'the toolbar offers Add to the project');
+	check(await ev(`(() => { const r = window.__spTest.rect('.bar [data-a=add]'); return r.x > 0; })()`), 'the toolbar offers Add to the project');
 	check(await ev(`(() => { const r = window.__spTest.rect('.seg'); return r.x > 0; })()`), 'the toolbar offers Exact | My style');
 	await ev('window.__spTest.style("mine")');
 	const addCall = call('site_pick', { wait: 120 });
 	await sleep(200);
 	await click(await center('.cta'));
 	await ev('window.__spTest.note("put it in the hero of my landing page")');
-	await click(await ui('[data-a=done]'));
-	await click(await ui('[data-a=add]'));
+	await ev('window.__spTest.keep()');
+	await click(await ui('.bar [data-a=add]'));
 	// their site opens in a new tab with the placer: they show where it goes
 	let devTab = null;
 	for (let k = 0; k < 300 && !devTab; k++) { devTab = (await hsend('Target.getTargets')).result.targetInfos.find((t) => t.type === 'page' && t.url.startsWith(DEV_URL)); if (!devTab) await sleep(100); }
