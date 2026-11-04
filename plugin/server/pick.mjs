@@ -85,12 +85,17 @@ export async function processBatch(batch, baseDir, { log = () => {} } = {}) {
 		mkdirSync(dir, { recursive: true });
 		await s.page.eval(`window.__spStatus?.(${JSON.stringify(`Reading ${p.n}. ${p.label}…`)})`).catch(() => {});
 		try {
-			await s.page.eval('window.__spHide?.(true)').catch(() => {});
+			await s.page.eval(`window.__spHide?.(true, ${JSON.stringify(sel)})`).catch(() => {});
 			const r = await extract(s.page, sel, dir, batch.url, { own: s.own, log }).finally(() => s.page.eval('window.__spHide?.(false)').catch(() => {}));
 			await s.page.eval(`window.__spStatus?.(${JSON.stringify(`Checking ${p.n} at phone width…`)})`).catch(() => {});
 				r.mobile = await atPhoneWidth(s, sel, dir, batch.url).catch(() => null);
 				let asset = null;
-			if (d.art?.src && /^https?:/.test(d.art.src) && d.art.kind !== 'video') asset = await download(d.art.src, dir, batch.url);
+			const files = (d.layers ?? []).filter((l) => l.src && /^https?:/.test(l.src) && l.tag !== 'video');
+			if (files.length > 1) {
+				asset = [];
+				for (const [k, l] of files.entries()) { const got = await download(l.src, dir, batch.url, `layer-${k + 1}`); if (got) asset.push({ ...got, layer: l }); }
+				if (!asset.length) asset = null;
+			} else if (d.art?.src && /^https?:/.test(d.art.src) && d.art.kind !== 'video') asset = await download(d.art.src, dir, batch.url);
 			const md = pickPrompt({ pick: p, d, r, url: batch.url, asset, dir });
 			writeFileSync(path.join(dir, 'PROMPT.md'), md);
 			out.push({ ...p, dir, md, r, d });
@@ -105,7 +110,7 @@ export async function processBatch(batch, baseDir, { log = () => {} } = {}) {
 	return out;
 }
 
-async function download(src, dir, referer) {
+async function download(src, dir, referer, base = 'asset') {
 	try {
 		const r = await fetch(src, { headers: { referer, 'user-agent': 'Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/130 Safari/537.36' }, signal: AbortSignal.timeout(30_000) });
 		if (!r.ok) return null;
@@ -113,7 +118,7 @@ async function download(src, dir, referer) {
 		const ext = /svg/.test(type) ? 'svg' : /png/.test(type) ? 'png' : /webp/.test(type) ? 'webp' : /avif/.test(type) ? 'avif' : /gif/.test(type) ? 'gif' : /json/.test(type) ? 'json' : /jpe?g/.test(type) ? 'jpg' : (new URL(src).pathname.split('.').pop() || 'bin').slice(0, 5);
 		const buf = Buffer.from(await r.arrayBuffer());
 		if (buf.length > 25_000_000) return null;
-		const file = `asset.${ext}`;
+		const file = `${base}.${ext}`;
 		writeFileSync(path.join(dir, file), buf);
 		return { file, src, bytes: buf.length };
 	} catch {
@@ -172,17 +177,24 @@ export function pickPrompt({ pick, d, r, url, asset, dir }) {
 		L.push(`- ${t.lines} line${t.lines > 1 ? 's' : ''} at this width; the copy, exactly: "${d.text.slice(0, 600)}"`);
 		L.push('');
 	}
-	if (d.art) {
+	if (Array.isArray(asset) && asset.length) {
+		const vec = asset.every((x) => x.layer.vector);
+		L.push('## The artwork');
+		L.push(`It is ${asset.length} ${vec ? 'SVG (vector) files' : 'image files'} stacked on top of each other, positioned exactly as in the code above. Use the files themselves (saved in the folder below), keep their stacking order and positions${vec ? ', and keep them as SVG so they stay sharp at any size' : ''}:`);
+		for (const [k, x] of asset.entries()) L.push(`- ${x.file}: layer ${k + 1}${x.layer.vector ? ', vector' : x.layer.natural ? `, ${x.layer.natural} natural` : ''}, shown at ${x.layer.shown} (${x.src})`);
+		L.push('');
+	} else if (d.art) {
 		const a = d.art;
 		L.push('## The artwork');
 		if (a.kind === 'svg') L.push(`It is an inline SVG: the exact drawing is in the markup above. Keep it as SVG, path for path.`);
+		else if ((a.kind === 'image' || a.kind === 'background') && /\.svg(\?|#|$)/i.test(a.src ?? '')) L.push(`It is an SVG (vector) file shown at ${d.box.width}×${d.box.height}: use the file itself${asset ? ` (${asset.file} in the folder below, from ${a.src})` : ` (${a.src})`} and keep it as SVG.`);
 		else if (a.kind === 'image' || a.kind === 'background') L.push(`It is a raster image (${a.natural ?? 'unknown size'} natural, shown at ${d.box.width}×${d.box.height}${a.fit && a.fit !== 'fill' ? `, object-fit ${a.fit}` : ''}). Words cannot redraw a picture exactly: use the file itself${asset ? ` (${asset.file} in the folder below, from ${a.src})` : ` (${a.src})`}. To make your own in the same style, describe it to an image model from original.png and keep the same size and crop.`);
 		else if (a.kind === 'canvas') L.push(`It is drawn by script on a ${a.webgl ? 'WebGL ' : ''}canvas at runtime, so there is no markup or file to copy. original.png is the reference frame; rebuild it with ${a.webgl ? 'WebGL (three.js or a shader)' : 'canvas 2D'} to match.`);
 		else if (a.kind === 'video') L.push(`It is a video (${a.src}). Use your own footage at the same size and crop; the frame in original.png is the reference.`);
 		else L.push(`It is a ${a.kind} animation${a.src ? ` (${a.src})` : ''}; use the same file or player.`);
 		L.push('');
 	}
-	if (r.code.fonts.length) {
+	if (r.code.fonts.length && d.text) {
 		L.push('## Fonts');
 		for (const f of r.code.fonts) L.push(`- ${f.family}: weights ${f.weights.join(', ') || '?'}; ${f.sources[0] ?? 'system font'}. Use the same font where the licence allows, or the closest free match with the same metrics.`);
 		L.push('');

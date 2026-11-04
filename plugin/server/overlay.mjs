@@ -191,7 +191,15 @@ export function overlay() {
 		});
 		window.__spStatus = (t) => { const ok = /^✓/.test(t || ''); status.textContent = ok ? t.replace(/^✓\s*/, '') : t; status.hidden = !t; status.classList.toggle('ok', ok); bar.classList.toggle('busy', !!t && !ok && !/^Could not/.test(t)); };
 		// out of every screenshot of a pick (the highlight would tint it)
-		window.__spHide = (v) => { host.style.display = v ? 'none' : ''; };
+		// out of a screenshot of a pick: the highlight, rings and card always; the toolbar only when it overlaps the pick,
+		// so the person still sees what is happening
+		window.__spHide = (v, sel) => {
+			for (const el of [hl, chip, marks, pop, hint]) el.style.visibility = v ? 'hidden' : '';
+			let over = false;
+			const t = v && sel && document.querySelector(sel);
+			if (t) { const a = t.getBoundingClientRect(), b = bar.getBoundingClientRect(); over = !(a.right + 24 < b.left || a.left - 24 > b.right || a.bottom + 24 < b.top || a.top - 24 > b.bottom); }
+			bar.style.visibility = over ? 'hidden' : '';
+		};
 		window.__spTest = { rect: (sel) => { const r = root.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, note: (t) => { note.value = t; }, keep: () => closePop(), style: setStyle, clear: () => (clearBtn.hidden ? '' : clearBtn.textContent), status: () => (status.hidden ? '' : status.textContent) };
 	};
 	start();
@@ -232,5 +240,11 @@ export function details(sel) {
 			alt: img?.alt || art?.getAttribute?.('aria-label') || '',
 		};
 	}
+	// every picture inside it, in paint order: a drawing is often several files stacked
+	out.layers = [el, ...el.querySelectorAll('img, svg, video, canvas')].filter((e) => /^(img|svg|video|canvas)$/i.test(e.tagName) && !(e.tagName.toLowerCase() === 'svg' && e.parentElement?.closest('svg'))).slice(0, 12).map((e) => {
+		const t = e.tagName.toLowerCase(), src = t === 'img' ? abs(e.currentSrc || e.src) : t === 'video' ? abs(e.currentSrc || '') : null;
+		const q = e.getBoundingClientRect();
+		return { tag: t, src, vector: t === 'svg' || /\.svg(\?|#|$)/i.test(src ?? '') || /^data:image\/svg/.test(src ?? ''), natural: e.naturalWidth ? `${e.naturalWidth}×${e.naturalHeight}` : null, shown: `${Math.round(q.width)}×${Math.round(q.height)}` };
+	});
 	return out;
 }

@@ -301,7 +301,8 @@ export async function extract(page, sel, outDir, url, { log = () => {}, own = fa
 		const LATIN = /U\+0-|U\+100-|U\+0000-/i;
 		const remoteFaces = [...new Set(css.fontFaces)].filter((f) => snap.families.some((fam) => f.includes(fam)))
 			.filter((f) => { const st = f.match(/font-style:\s*(\w+)/)?.[1] ?? 'normal'; return snap.styles.includes(st === 'oblique' ? 'italic' : st); })
-			.filter((f) => !snap.latin || !/unicode-range/.test(f) || LATIN.test(f));
+			.filter((f) => !snap.latin || !/unicode-range/.test(f) || LATIN.test(f))
+			.filter(() => !!snap.text); // a picture with no words needs no fonts
 		const faces = await embedFonts(remoteFaces, url);
 		const frames = snap.anims.map((a) => css.keyframes[a]).filter(Boolean);
 		const bg = snap.bg;
