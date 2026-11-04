@@ -14,8 +14,9 @@ export const THEME = String.raw`
 .chip:before{content:"";width:6px;height:6px;border-radius:2px;background:var(--accent)}
 .chip i{font-style:normal;color:var(--muted);font-weight:450;font-variant-numeric:tabular-nums}
 .ring{position:fixed;pointer-events:none;border:1px solid var(--accent);border-radius:6px;box-shadow:0 0 0 3px rgba(113,112,255,.12)}
-.badge{position:fixed;pointer-events:none;width:20px;height:20px;border-radius:6px;background:var(--accent2);color:#fff;font-size:11px;font-weight:650;display:grid;place-items:center;font-variant-numeric:tabular-nums;box-shadow:0 0 0 1.5px var(--bg),0 4px 10px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.2)}
+.badge{appearance:none;border:0;padding:0;cursor:pointer;font-family:inherit;transition:transform 120ms cubic-bezier(.2,0,0,1);position:fixed;pointer-events:auto;width:20px;height:20px;border-radius:6px;background:var(--accent2);color:#fff;font-size:11px;font-weight:650;display:grid;place-items:center;font-variant-numeric:tabular-nums;box-shadow:0 0 0 1.5px var(--bg),0 4px 10px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.2)}
 
+.badge:hover{transform:scale(1.12)}
 /* surfaces */
 .surface{position:fixed;pointer-events:auto;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0) 40%),var(--panel);border:1px solid var(--line);color:var(--text);box-shadow:0 0 0 1px rgba(0,0,0,.55),0 1px 0 rgba(255,255,255,.04) inset,0 24px 48px -12px rgba(0,0,0,.6),0 8px 16px -8px rgba(0,0,0,.4)}
 
@@ -55,23 +56,28 @@ export const THEME = String.raw`
 .status:before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px rgba(113,112,255,.18);animation:sp-pulse 1.2s ease-in-out infinite}
 .status.ok:before{background:#4cb782;box-shadow:0 0 0 3px rgba(76,183,130,.18);animation:none}
 @keyframes sp-pulse{50%{opacity:.35}}
-kbd{font:500 11px/1 ui-sans-serif,-apple-system,system-ui,sans-serif;color:var(--muted);min-width:18px;height:18px;padding:0 5px;border-radius:5px;display:inline-grid;place-items:center;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px var(--line)}
+kbd{font:500 10.5px/1 ui-sans-serif,-apple-system,system-ui,sans-serif;color:var(--muted);min-width:17px;height:17px;padding:0 4px;border-radius:4px;display:inline-grid;place-items:center;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px var(--line)}
+
+/* a quiet text button (Clear) */
+.btn.quiet{color:var(--muted);height:28px;padding:0 8px;font-size:12px}
+.btn.quiet:hover{color:var(--text)}
 
 /* the note card: header, hairline, a plain writing area, footer */
-.pop{width:340px;border-radius:14px;display:none;--r:14px;--beam:70px;animation:sp-in 160ms cubic-bezier(.2,0,0,1)}
+.pop{width:288px;border-radius:12px;display:none;--r:12px;--beam:60px;animation:sp-in 160ms cubic-bezier(.2,0,0,1)}
 @keyframes sp-in{from{opacity:0;transform:translateY(4px) scale(.985)}}
-.head{display:flex;align-items:center;gap:8px;height:44px;padding:0 12px 0 14px}
-.head .num{width:20px;height:20px;border-radius:6px;background:var(--accent2);color:#fff;font-size:11px;font-weight:650;display:grid;place-items:center;font-variant-numeric:tabular-nums;box-shadow:inset 0 1px 0 rgba(255,255,255,.2)}
-.head b{font-size:13px;font-weight:590;color:var(--text)}
-.head .dim{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.head{display:flex;align-items:center;gap:7px;height:36px;padding:0 8px 0 10px}
+.head .num{width:18px;height:18px;font-size:10.5px!important;border-radius:6px;background:var(--accent2);color:#fff;font-size:11px;font-weight:650;display:grid;place-items:center;font-variant-numeric:tabular-nums;box-shadow:inset 0 1px 0 rgba(255,255,255,.2)}
+.head b{font-size:12.5px;font-weight:590;color:var(--text)}
+.head .dim{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
 .head kbd{margin-left:auto}
 .rule{height:1px;background:var(--line)}
-.pop textarea{display:block;width:100%;height:88px;resize:none;border:0;outline:0;background:transparent;color:var(--text);caret-color:var(--accent);padding:12px 14px;font-size:13.5px;line-height:1.55;letter-spacing:-.008em}
+.pop textarea{display:block;width:100%;height:52px;resize:none;border:0;outline:0;background:transparent;color:var(--text);caret-color:var(--accent);padding:9px 10px;font-size:13px;line-height:1.5;letter-spacing:-.008em}
 .pop textarea::placeholder{color:var(--faint)}
-.foot{display:flex;align-items:center;justify-content:space-between;padding:8px 8px 8px 6px}
-.btn.ghost{color:var(--muted);height:30px;padding:0 9px;font-size:12.5px}
+.foot{display:flex;align-items:center;justify-content:space-between;padding:6px}
+.btn.ghost{color:var(--muted);height:26px;padding:0 7px;gap:5px;font-size:12px}
+.btn.ghost svg{width:13px;height:13px}
 .btn.ghost:hover{color:var(--danger);background:rgba(235,87,87,.08)}
-.btn.done{height:30px;padding:0 6px 0 11px;font-size:12.5px;color:var(--text);background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px var(--line)}
+.btn.done{height:26px;padding:0 4px 0 9px;gap:6px;font-size:12px;color:var(--text);background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px var(--line)}
 .btn.done:hover{background:rgba(255,255,255,.09)}
 .btn.done kbd{background:rgba(255,255,255,.06)}
 

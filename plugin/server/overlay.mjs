@@ -13,15 +13,16 @@ export function overlay() {
 		const root = host.attachShadow({ mode: 'closed' });
 		root.innerHTML = `<style>${window.__spTheme || ''}</style>
 		<div class="hl"></div><div class="chip"></div><div class="marks"></div>
-		<div class="hint surface"><b>Hover</b> anything you like, <b>click</b> to pick it, then <b>Get prompts</b></div>
+		<div class="hint surface"><b>Hover</b> anything you like, <b>click</b> to pick it (again to deselect), then <b>Get prompts</b></div>
 		<div class="pop surface"><span class="beam"></span>
 			<div class="head k"></div><div class="rule"></div>
-			<textarea placeholder="What do you like about it? (optional)"></textarea>
+			<textarea placeholder="What do you like about it? (optional)" rows="2"></textarea>
 			<div class="rule"></div>
 			<div class="foot"><button class="btn ghost" data-a="remove">${window.__spIcons?.trash ?? ''}Remove</button><button class="btn done" data-a="done">Done <kbd>↵</kbd></button></div></div>
 		<div class="bar surface">
 			<div class="mark">${window.__spIcons?.cursor ?? ''}</div>
 			<button class="btn on" data-a="pick" title="Pick (Esc)">${window.__spIcons?.pick ?? ''}Pick<span class="count">0</span></button>
+			<button class="btn quiet" data-a="clear" hidden title="Deselect everything">Clear</button>
 			<span class="sep"></span>
 			<div class="seg" hidden><button data-s="exact" title="Pixel for pixel, as it is on this site">Exact</button><button data-s="mine" title="Same layout and motion, in your site's fonts, colours and radius">My style</button></div>
 			<button class="btn" data-a="add" disabled hidden>${window.__spIcons?.add ?? ''}Add to project</button>
@@ -31,15 +32,15 @@ export function overlay() {
 		document.documentElement.appendChild(host);
 		const $ = (s) => root.querySelector(s);
 		const hl = $('.hl'), chip = $('.chip'), marks = $('.marks'), pop = $('.pop'), note = $('textarea'), hint = $('.hint');
-		const bar = $('.bar'), pickBtn = $('[data-a=pick]'), sendBtn = $('[data-a=send]'), addBtn = $('[data-a=add]'), count = $('.count'), status = $('.status');
+		const clearBtn = $('[data-a=clear]'), bar = $('.bar'), pickBtn = $('[data-a=pick]'), sendBtn = $('[data-a=send]'), addBtn = $('[data-a=add]'), count = $('.count'), status = $('.status');
 		const proj = window.__spProject;
 		if (proj) {
 			// building something: adding it is the main action, a prompt the other
 			addBtn.hidden = false;
 				$('.seg').hidden = false;
 			addBtn.innerHTML = `${window.__spIcons?.add ?? ''}Add to ${(proj.name.length > 18 ? 'project' : proj.name).replace(/</g, '&lt;')}`;
-			note.placeholder = 'What do you like about it, or where should it go? (optional)';
-			hint.innerHTML = '<b>Hover</b> anything you like, <b>click</b> to pick it, then <b>Add</b> it to your project';
+			note.placeholder = 'What you like, or where it goes (optional)';
+			hint.innerHTML = '<b>Hover</b> anything you like, <b>click</b> to pick it (again to deselect), then <b>Add</b> it to your project';
 		}
 		const store = { get: (k) => { try { return sessionStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch {} } };
 		let style = store.get('__spStyle') || 'exact';
@@ -75,7 +76,7 @@ export function overlay() {
 		const show = () => {
 			if (!cur || !picking || open) { hl.style.display = chip.style.display = 'none'; return; }
 			const r = place(hl, cur);
-			chip.innerHTML = describe(cur).label;
+			chip.innerHTML = picks.some((p) => p.el === cur) ? `Deselect<i>${picks.find((p) => p.el === cur).n}</i>` : describe(cur).label;
 			Object.assign(chip.style, { display: 'flex', left: Math.max(6, Math.min(innerWidth - 200, r.left - 3)) + 'px', top: (r.top > 32 ? r.top - 28 : Math.min(innerHeight - 30, r.bottom + 8)) + 'px' });
 		};
 		const target = (el) => {
@@ -83,20 +84,37 @@ export function overlay() {
 			if (svg && svg.ownerSVGElement == null) return svg; // a part of an icon or a drawing: the whole svg
 			return el;
 		};
+		// rings and badges are kept (not rebuilt every frame) so a badge can be clicked
+		const marked = new Map();
 		const redraw = () => {
-			marks.innerHTML = '';
+			for (const [p, m] of marked) if (!picks.includes(p)) { m.ring.remove(); m.badge.remove(); marked.delete(p); }
 			for (const p of picks) {
-				if (!document.contains(p.el)) continue;
+				let m = marked.get(p);
+				if (!m) {
+					m = { ring: document.createElement('div'), badge: document.createElement('button') };
+					m.ring.className = 'ring'; m.badge.className = 'badge'; m.badge.textContent = p.n; m.badge.dataset.n = p.n;
+					m.badge.title = 'Edit the note';
+					marks.append(m.ring, m.badge); marked.set(p, m);
+				}
+				const on = document.contains(p.el);
+				m.ring.style.display = m.badge.style.display = on ? '' : 'none';
+				if (!on) continue;
 				const r = p.el.getBoundingClientRect();
-				const ring = document.createElement('div'); ring.className = 'ring';
-				Object.assign(ring.style, { left: r.left - 3 + 'px', top: r.top - 3 + 'px', width: r.width + 6 + 'px', height: r.height + 6 + 'px' });
-				const b = document.createElement('div'); b.className = 'badge'; b.textContent = p.n;
-				Object.assign(b.style, { left: Math.max(4, r.left - 10) + 'px', top: Math.max(4, r.top - 10) + 'px' });
-				marks.append(ring, b);
+				Object.assign(m.ring.style, { left: r.left - 3 + 'px', top: r.top - 3 + 'px', width: r.width + 6 + 'px', height: r.height + 6 + 'px' });
+				Object.assign(m.badge.style, { left: Math.max(4, r.left - 10) + 'px', top: Math.max(4, r.top - 10) + 'px' });
 			}
 			count.textContent = String(picks.length);
 			count.classList.toggle('has', picks.length > 0);
+			clearBtn.hidden = !picks.length;
+			clearBtn.textContent = picks.length > 1 ? 'Clear all' : 'Clear';
 			sendBtn.disabled = addBtn.disabled = !picks.length;
+		};
+		const unpick = (p) => {
+			if (!p) return;
+			if (open === p) { open = null; pop.style.display = 'none'; }
+			p.el.removeAttribute('data-sp-pick');
+			picks.splice(picks.indexOf(p), 1);
+			redraw();
 		};
 		const loop = () => { if (picks.length) redraw(); if (cur && picking) show(); requestAnimationFrame(loop); };
 		requestAnimationFrame(loop);
@@ -106,11 +124,14 @@ export function overlay() {
 			$('.k').innerHTML = `<span class="num">${p.n}</span><b>${NAME[p.kind]}</b><span class="dim">${describe(p.el).plain.split(' · ')[1]}</span><kbd>esc</kbd>`;
 			note.value = p.note;
 			// under the pick (over it when there is no room), never covering it unless it fills the screen
-			const H = 196, left = Math.max(10, Math.min(innerWidth - 352, r.left));
+			const H = 150, left = Math.max(10, Math.min(innerWidth - 300, r.left));
 			const top = r.bottom + 12 + H < innerHeight - 70 ? r.bottom + 12 : r.top - 12 - H > 10 ? r.top - 12 - H : Math.max(10, Math.min(innerHeight - H - 80, r.top + 12));
 			Object.assign(pop.style, { display: 'block', left: left + 'px', top: top + 'px' });
+			note.style.height = ''; grow();
 			setTimeout(() => note.focus(), 0);
 		};
+		const grow = () => { note.style.height = 'auto'; note.style.height = Math.min(140, Math.max(52, note.scrollHeight)) + 'px'; };
+		note.addEventListener('input', grow);
 		const closePop = () => { if (open) open.note = note.value.trim(); open = null; pop.style.display = 'none'; };
 		const setPicking = (v) => { picking = v; pickBtn.classList.toggle('on', v); if (!v) { cur = null; show(); } };
 
@@ -128,7 +149,7 @@ export function overlay() {
 			if (open) return closePop();
 			if (!cur) return;
 			const existing = picks.find((p) => p.el === cur);
-			if (existing) return openPop(existing);
+			if (existing) return unpick(existing); // clicking a pick again deselects it
 			const d = describe(cur);
 			const p = { n: ++n, el: cur, kind: d.kind, label: d.plain, note: '' };
 			store.set('__spN', String(n));
@@ -145,12 +166,15 @@ export function overlay() {
 			if (picking && !open && e.key === 'ArrowUp' && cur?.parentElement && cur.parentElement !== document.body) { e.preventDefault(); cur = cur.parentElement; show(); }
 		}, true);
 		root.addEventListener('click', (e) => {
-			const sb = e.target.closest('[data-s]');
+			const badge = e.target.closest('.badge');
+				if (badge) { const p = picks.find((x) => x.n === +badge.dataset.n); if (p) { closePop(); openPop(p); } return; }
+				const sb = e.target.closest('[data-s]');
 				if (sb) return setStyle(sb.dataset.s);
 				const a = e.target.closest('[data-a]')?.getAttribute('data-a');
 			if (a === 'pick') setPicking(!picking);
 			if (a === 'done') closePop();
-			if (a === 'remove' && open) { open.el.removeAttribute('data-sp-pick'); picks.splice(picks.indexOf(open), 1); open = null; pop.style.display = 'none'; redraw(); }
+			if (a === 'remove' && open) unpick(open);
+				if (a === 'clear') { for (const p of [...picks]) unpick(p); status.hidden = true; }
 			if ((a === 'send' || a === 'add') && picks.length) {
 				closePop();
 				const batch = picks.filter((p) => document.contains(p.el)).map((p) => ({ n: p.n, kind: p.kind, label: p.label, note: p.note }));
@@ -166,7 +190,7 @@ export function overlay() {
 		window.__spStatus = (t) => { const ok = /^✓/.test(t || ''); status.textContent = ok ? t.replace(/^✓\s*/, '') : t; status.hidden = !t; status.classList.toggle('ok', ok); bar.classList.toggle('busy', !!t && !ok && !/^Could not/.test(t)); };
 		// out of every screenshot of a pick (the highlight would tint it)
 		window.__spHide = (v) => { host.style.display = v ? 'none' : ''; };
-		window.__spTest = { rect: (sel) => { const r = root.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, note: (t) => { note.value = t; }, style: setStyle, status: () => (status.hidden ? '' : status.textContent) };
+		window.__spTest = { rect: (sel) => { const r = root.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, note: (t) => { note.value = t; }, style: setStyle, clear: () => (clearBtn.hidden ? '' : clearBtn.textContent), status: () => (status.hidden ? '' : status.textContent) };
 	};
 	start();
 }

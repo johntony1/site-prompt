@@ -120,6 +120,17 @@ try {
 	const click = async (p) => { await move(p); for (const type of ['mousePressed', 'mouseReleased']) await hsend('Input.dispatchMouseEvent', { type, x: p.x, y: p.y, button: 'left', clickCount: 1 }, sid); await sleep(150); };
 	const ui = (sel) => ev(`window.__spTest.rect(${JSON.stringify(sel)})`);
 
+	// 0. deselecting: click a pick again; Clear all
+	const picked = () => ev('document.querySelectorAll("[data-sp-pick]").length');
+	await click(await center('.cta'));
+	await click(await ui('[data-a=done]'));
+	await click(await center('.cta'));
+	check(await picked() === 0, 'clicking a pick again deselects it');
+	await click(await center('.cta')); await click(await ui('[data-a=done]'));
+	await click(await center('h1')); await click(await ui('[data-a=done]'));
+	check(await picked() === 2 && /Clear all/.test(await ev('window.__spTest.clear()')), 'two picks: the toolbar offers Clear all');
+	await click(await ui('[data-a=clear]'));
+	check(await picked() === 0 && await ev('window.__spTest.clear()') === '', 'Clear all deselects everything');
 	// 1. the button, with a note
 	await click(await center('.cta'));
 	check(await ev('location.href') === URL0, 'clicking a link while picking does not follow it');
