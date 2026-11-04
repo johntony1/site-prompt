@@ -45,6 +45,14 @@ you like (the note box takes "put it on my pricing page"), press Add, and your a
 your stack (Next.js, React, Vue, Svelte, Tailwind, TypeScript...) with the original's exact values, then checks it
 in your running dev server against the original with `site_match` and fixes what is off.
 
+- **Show where it goes.** With your dev server running, Add opens your site in a new tab: click where each pick goes
+  (a line shows above or below, hold Alt to replace). Your agent gets the spot and the source file and line it is in
+  (React, Vue, Svelte and Astro dev info, else a search of your code).
+- **Exact or My style.** Exact copies it pixel for pixel. My style keeps the layout, spacing and motion and dresses it
+  in your fonts, colours, radius and CSS variables, read from your running site.
+- **Phones too.** Every pick is also read at 390 px wide, so the prompt says what the original changes there.
+- **Answers in the toolbar.** When it is built, your agent says so in the toolbar ("✓ Added to Hero.tsx, 99% match").
+
 ## Tools
 
 - `site_read`: read and measure a page, write the folder above.

@@ -25,3 +25,27 @@ export function project(dir = process.env.SITE_PROMPT_PROJECT || process.cwd()) 
 		motion: [deps['framer-motion'] && 'framer-motion', deps.motion && 'motion', deps.gsap && 'gsap'].filter(Boolean),
 	};
 }
+
+const DEFAULT_PORTS = { 'Next.js': [3000, 3001], Nuxt: [3000], SvelteKit: [5173], Astro: [4321], 'Remix / React Router': [5173, 3000], Vue: [5173, 8080], Svelte: [5173], Solid: [3000, 5173], Angular: [4200], React: [5173, 3000] };
+
+/** Where their site is running in dev, if it is: the port in their dev script, the framework's default, then the usual ones. */
+export async function devUrl(proj) {
+	if (process.env.SITE_PROMPT_DEV_URL) return process.env.SITE_PROMPT_DEV_URL;
+	if (!proj) return null;
+	let script = '';
+	try { const pkg = JSON.parse(readFileSync(path.join(proj.dir, 'package.json'), 'utf8')); script = `${pkg.scripts?.dev ?? ''} ${pkg.scripts?.start ?? ''}`; } catch {}
+	const fromScript = [...script.matchAll(/(?:--port|-p)[ =](\d{2,5})/g)].map((m) => +m[1]);
+	const fw = Object.keys(DEFAULT_PORTS).find((k) => proj.framework?.startsWith(k));
+	const ports = [...new Set([...fromScript, ...(DEFAULT_PORTS[fw] ?? []), 3000, 5173, 4321, 3001, 5174, 8080, 4200, 8000, 5500])];
+	const tries = ports.map(async (port) => {
+		for (const h of ['localhost', '127.0.0.1']) {
+			try {
+				const r = await fetch(`http://${h}:${port}/`, { signal: AbortSignal.timeout(900) });
+				if (/html/.test(r.headers.get('content-type') ?? '')) return `http://localhost:${port}/`;
+			} catch {}
+		}
+		return null;
+	});
+	const found = await Promise.all(tries);
+	return found.find(Boolean) ?? null;
+}

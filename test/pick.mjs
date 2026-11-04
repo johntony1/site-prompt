@@ -33,6 +33,7 @@ h1 { font-size: 64px; line-height: 1.05; letter-spacing: -0.02em; font-weight: 7
 .cta { display: inline-flex; align-items: center; height: 48px; padding: 0 22px; border-radius: 12px; background: #111; color: #fff; text-decoration: none; font-size: 15px; font-weight: 600; transition: background-color 180ms ease, box-shadow 180ms ease; box-shadow: 0 1px 0 rgba(255,255,255,.2) inset, 0 6px 16px rgba(0,0,0,.18); }
 .cta:hover { background: #2a2a2a; box-shadow: 0 1px 0 rgba(255,255,255,.2) inset, 0 10px 24px rgba(0,0,0,.24); }
 .art { width: 320px; height: 320px; }
+@media (max-width: 600px) { .hero { flex-direction: column; padding: 48px 20px; } h1 { font-size: 40px; } .art { display: none; } }
 </style></head><body>
 <section class="hero"><div><h1>Halo keeps your team in orbit</h1><a class="cta" href="/go">Try Halo free</a></div>
 <svg class="art" viewBox="0 0 320 320"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb36b"/><stop offset="1" stop-color="#ff5f8a"/></linearGradient></defs>
@@ -41,6 +42,17 @@ h1 { font-size: 64px; line-height: 1.05; letter-spacing: -0.02em; font-weight: 7
 const site = http.createServer((req, res) => (res.writeHead(200, { 'content-type': 'text/html' }), res.end(PAGE)));
 await new Promise((r) => site.listen(0, '127.0.0.1', r));
 const URL0 = `http://127.0.0.1:${site.address().port}/`;
+
+// the person's own site, running in dev
+const DEV = `<!doctype html><html><head><meta charset="utf-8"><title>My launch</title><style>
+:root { --brand: #6d28d9; --radius: 10px; --font-sans: Georgia, serif; }
+body { margin: 0; font-family: var(--font-sans); color: #1c1917; background: #fafaf9; }
+.hero { padding: 80px; } .hero h1 { font-size: 48px; margin: 0 0 16px; } .btn { background: var(--brand); color: #fff; border-radius: var(--radius); padding: 10px 18px; display: inline-block; }
+.features { padding: 60px 80px; background: #fff; }
+</style></head><body><section class="hero"><h1>Ship faster with Orbit</h1><a class="btn" href="#">Start</a></section><section class="features"><h2>Everything you need</h2></section></body></html>`;
+const devSite = http.createServer((req, res) => (res.writeHead(200, { 'content-type': 'text/html' }), res.end(DEV)));
+await new Promise((r) => devSite.listen(0, '127.0.0.1', r));
+const DEV_URL = `http://127.0.0.1:${devSite.address().port}/`;
 
 // "their" Chrome, remote debugging on
 const chrome = spawn(findChrome(), ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--window-size=1440,900', '--force-color-profile=srgb', 'about:blank'], { stdio: 'ignore' });
@@ -53,7 +65,9 @@ writeFileSync(path.join(proj, 'package.json'), JSON.stringify({ name: 'my-launch
 writeFileSync(path.join(proj, 'tsconfig.json'), '{}');
 mkdirSync(path.join(proj, 'src', 'components'), { recursive: true });
 mkdirSync(path.join(proj, 'src', 'app'), { recursive: true });
-const proc = spawn('node', [server], { cwd: proj, env: { ...process.env, SITE_PROMPT_OUT: work, SITE_PROMPT_CHROME_DIR: profile, SITE_PROMPT_NO_CLIPBOARD: '1' }, stdio: ['pipe', 'pipe', 'inherit'] });
+writeFileSync(path.join(proj, 'src', 'app', 'page.tsx'), `export default function Page() {\n  return (\n    <main>\n      <section className="hero">\n        <h1>Ship faster with Orbit</h1>\n      </section>\n      <section className="features"><h2>Everything you need</h2></section>\n    </main>\n  );\n}\n`);
+writeFileSync(path.join(proj, 'src', 'app', 'globals.css'), ':root { --brand: #6d28d9; --radius: 10px; }');
+const proc = spawn('node', [server], { cwd: proj, env: { ...process.env, SITE_PROMPT_OUT: work, SITE_PROMPT_CHROME_DIR: profile, SITE_PROMPT_NO_CLIPBOARD: '1', SITE_PROMPT_DEV_URL: DEV_URL }, stdio: ['pipe', 'pipe', 'inherit'] });
 let buf = '', seq = 0;
 const waiting = new Map();
 proc.stdout.on('data', (d) => {
@@ -130,6 +144,8 @@ try {
 	check(/What I want from it:\*\* the soft inner highlight/.test(btn), 'the button prompt carries the note');
 	check(/```html[\s\S]*Try Halo free[\s\S]*```css[\s\S]*border-top-left-radius:12px/.test(btn) && /\.c0:hover\{[^}]*background-color/.test(btn), 'the button prompt has its exact code and hover state');
 	check(/## Type[\s\S]*64px \/ line height 67.2px, weight 700, letter spacing -1.28px/.test(txt) && txt.includes('"Halo keeps your team in orbit"'), 'the text prompt has the full type spec and the copy', txt.match(/## Type[\s\S]{0,200}/)?.[0]);
+	check(/## On phones \(390 px wide\)[\s\S]*font-size 64px → 40px/.test(txt), 'the headline prompt says how it changes on phones', txt.match(/## On phones[\s\S]{0,160}/)?.[0]);
+	check(/## On phones[\s\S]*hidden on phones|The original hides it/.test(art), 'the drawing prompt says it is hidden on phones', art.match(/## On phones[\s\S]{0,120}/)?.[0]);
 	check(/inline SVG/.test(art) && /<circle[^>]*r="14"/.test(art) && /linearGradient/.test(art), 'the illustration prompt has the drawing itself');
 	check((r.words.match(/matches the original/g) ?? []).length === 3, 'every copy matches its original', r.words.match(/Copy check: .*/g));
 	const saved = r.words.match(/Saved: (~[^\s]+|\/[^\s]+)/g) ?? [];
@@ -139,17 +155,33 @@ try {
 	check(!(await ev('document.querySelectorAll("[data-sp-pick],[data-sp-n]").length')), 'the page is left clean');
 	// 4. building: the toolbar offers Add to my-launch; the agent is told to build it into the project
 	check(await ev(`(() => { const r = window.__spTest.rect('[data-a=add]'); return r.x > 0; })()`), 'the toolbar offers Add to the project');
+	check(await ev(`(() => { const r = window.__spTest.rect('.seg'); return r.x > 0; })()`), 'the toolbar offers Exact | My style');
+	await ev('window.__spTest.style("mine")');
 	const addCall = call('site_pick', { wait: 120 });
 	await sleep(200);
 	await click(await center('.cta'));
 	await ev('window.__spTest.note("put it in the hero of my landing page")');
 	await click(await ui('[data-a=done]'));
 	await click(await ui('[data-a=add]'));
+	// their site opens in a new tab with the placer: they show where it goes
+	let devTab = null;
+	for (let k = 0; k < 300 && !devTab; k++) { devTab = (await hsend('Target.getTargets')).result.targetInfos.find((t) => t.type === 'page' && t.url.startsWith(DEV_URL)); if (!devTab) await sleep(100); }
+	check(!!devTab, 'Add opens their running site in a new tab', devTab?.url);
+	const dsid = (await hsend('Target.attachToTarget', { targetId: devTab.targetId, flatten: true })).result.sessionId;
+	const dev = async (expr) => (await hsend('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true }, dsid)).result?.result?.value;
+	for (let k = 0; k < 300 && !(await dev('!!window.__spTest && !!document.querySelector("site-prompt-place")')); k++) await sleep(100);
+	check(/Where does \d+\. Button go\?/.test(await dev('window.__spTest.status()')), 'the placer asks where it goes', await dev('window.__spTest.status()'));
+	await dev(`window.__spTest.place('.hero h1', 'after')`);
 	const add = await addCall;
 	writeFileSync(path.join(out, 'add.txt'), add.words);
 	check(/ADD TO THE PROJECT/.test(add.words) && /my-launch/.test(add.words) && /Next\.js \(App Router\), Tailwind 4, TypeScript/.test(add.words) && /src\/components/.test(add.words), 'Add: the agent is told to build it into the project, in its stack', add.words.split('\n')[0]);
-	check(/arbitrary values/.test(add.words) && /note: "put it in the hero/.test(add.words) && !/# Build this/.test(add.words), 'with Tailwind guidance and the note, and no prompt dump');
-	check(/Your agent is adding it/.test(await ev('window.__spTest.status()')), 'the toolbar says it is being added', await ev('window.__spTest.status()'));
+	check(/Goes: BELOW <h1> on \/ \(text: "Ship faster with Orbit"\)/.test(add.words), 'it knows the spot: below the headline', add.words.match(/Goes: .*/)?.[0]);
+	check(/Source: src\/app\/page\.tsx:5/.test(add.words), 'and the source file and line it is in', add.words.match(/Source: .*/)?.[0]);
+	check(/STYLE: MY STYLE/.test(add.words) && /THEIR DESIGN/.test(add.words) && /--brand/.test(add.words) && /Georgia/.test(add.words), 'My style: their design comes with it (variables, fonts)');
+	check(/phones: /.test(add.words) && /note: "put it in the hero/.test(add.words) && !/# Build this/.test(add.words), 'with the phone layout and the note, and no prompt dump');
+	check(add.images >= 2, 'with the pick and their page with the spot marked', add.images);
+	const said = await call('site_pick', { say: '✓ Added to page.tsx, 99% match', wait: 0 });
+	check(/Shown/.test(said.words) && /Added to page\.tsx/.test(await ev('window.__spTest.status()')), 'the agent can answer in the toolbar', await ev('window.__spTest.status()'));
 
 	// 5. site_match: the person's build in their running app against the original
 	const folder = add.words.match(/Folder: (.+)/)[1].trim();
@@ -168,11 +200,13 @@ try {
 
 	const stopped = await call('site_pick', { stop: true });
 	check(/Closed/.test(stopped.words) && !(await ev('!!document.querySelector("site-prompt-ui")')), 'stop removes the picker and leaves their Chrome open');
+	check(!(await hsend('Target.getTargets')).result.targetInfos.some((t) => t.type === 'page' && t.url.startsWith(DEV_URL)), 'and closes the dev tab it opened');
 } finally {
 	proc.kill();
 	hand.close();
 	chrome.kill('SIGKILL');
 	site.close();
+	devSite.close();
 }
 console.log(failures ? `\n${failures} failed` : '\nall passed');
 process.exit(failures ? 1 : 0);

@@ -151,7 +151,7 @@ export async function launch({ headless = true, width = 1440, height = 900, prof
 		if (!profileDir) try { rmSync(profile, { recursive: true, force: true }); } catch {}
 	};
 	open.add(close);
-	return { page, close: () => (open.delete(close), close()) };
+	return { page, endpoint, close: () => (open.delete(close), close()) };
 }
 
 const open = new Set();
@@ -280,4 +280,31 @@ export async function connectOwn(url, { log = () => {} } = {}) {
 		if (state === 'complete' || state === 'interactive') break;
 	}
 	return { page, own: true, url: target.url, close: () => { try { ws.close(); } catch {} }, router };
+}
+
+/** A second tab in the same browser (their dev site beside the site they pick from), attached and ready. */
+export async function openTab(conn, url) {
+	let router = conn.router, mine = false;
+	if (!router?.send || !conn.own) {
+		router = new Router(await socket(conn.endpoint));
+		mine = true;
+	}
+	const { targetId } = await router.send('Target.createTarget', { url });
+	const { sessionId } = await router.send('Target.attachToTarget', { targetId, flatten: true });
+	await router.send('Target.activateTarget', { targetId }).catch(() => {});
+	const page = new Page(router, sessionId);
+	for (const d of ['Page', 'Runtime', 'DOM', 'CSS']) await page.send(`${d}.enable`);
+	for (let t0 = Date.now(); Date.now() - t0 < 30_000; await new Promise((r) => setTimeout(r, 100))) {
+		const state = await page.eval('location.href !== "about:blank" && document.readyState').catch(() => false);
+		if (state === 'complete') break;
+	}
+	await document_fonts(page);
+	return {
+		page,
+		targetId,
+		close: async () => {
+			await router.send('Target.closeTarget', { targetId }).catch(() => {});
+			if (mine) try { router.ws.close(); } catch {}
+		},
+	};
 }

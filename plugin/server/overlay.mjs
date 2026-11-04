@@ -35,6 +35,9 @@ export function overlay() {
 			.pop textarea{width:100%;height:64px;resize:none;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:#f4f4f5;border-radius:9px;padding:8px 10px;font-size:13px;outline:none}
 			.pop textarea:focus{border-color:#4f8cff}
 			.pop .row{display:flex;justify-content:space-between;margin-top:10px}
+			.seg{display:flex;padding:2px;border-radius:999px;background:rgba(255,255,255,.07)}
+			.seg button{appearance:none;border:0;height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:550;color:#a1a1aa;background:transparent;cursor:pointer}
+			.seg button.on{background:rgba(255,255,255,.14);color:#fff}
 			.hint{position:fixed;left:50%;bottom:72px;transform:translateX(-50%);pointer-events:none;background:rgba(20,20,22,.9);color:#e4e4e7;font-size:12.5px;padding:8px 12px;border-radius:999px;white-space:nowrap;transition:opacity .3s}
 		</style>
 		<div class="hl"></div><div class="chip"></div><div class="marks"></div>
@@ -46,7 +49,8 @@ export function overlay() {
 			<button class="btn on" data-a="pick">Pick</button>
 			<span class="count">0</span>
 			<button class="btn" data-a="send" disabled>Get prompts</button>
-			<button class="btn primary" data-a="add" disabled hidden>Add to project</button>
+			<div class="seg" hidden><button data-s="exact" title="Pixel for pixel, as it is on this site">Exact</button><button data-s="mine" title="Same layout and motion, in your site's fonts, colours and radius">My style</button></div>
+				<button class="btn primary" data-a="add" disabled hidden>Add to project</button>
 			<span class="status" hidden></span>
 		</div>`;
 		document.documentElement.appendChild(host);
@@ -57,11 +61,15 @@ export function overlay() {
 		if (proj) {
 			// building something: adding it is the main action, a prompt the other
 			addBtn.hidden = false;
+				$('.seg').hidden = false;
 			addBtn.textContent = `Add to ${proj.name.length > 18 ? 'project' : proj.name}`;
 			note.placeholder = 'What do you like, or where should it go? (optional)';
 			hint.textContent = 'Hover anything you like, click to pick it, then add it to your project';
 		} else sendBtn.classList.add('primary');
-		let picking = true, cur = null, open = null, n = +(sessionStorage.getItem('__spN') || 0);
+		let style = sessionStorage.getItem('__spStyle') || 'exact';
+			const setStyle = (v) => { style = v; try { sessionStorage.setItem('__spStyle', v); } catch {} for (const b of root.querySelectorAll('.seg button')) b.classList.toggle('on', b.dataset.s === v); };
+			setStyle(style);
+			let picking = true, cur = null, open = null, n = +(sessionStorage.getItem('__spN') || 0);
 		const picks = [];
 		setTimeout(() => (hint.style.opacity = '0'), 6000);
 
@@ -159,7 +167,9 @@ export function overlay() {
 			if (picking && !open && e.key === 'ArrowUp' && cur?.parentElement && cur.parentElement !== document.body) { e.preventDefault(); cur = cur.parentElement; show(); }
 		}, true);
 		root.addEventListener('click', (e) => {
-			const a = e.target.closest('[data-a]')?.getAttribute('data-a');
+			const sb = e.target.closest('[data-s]');
+				if (sb) return setStyle(sb.dataset.s);
+				const a = e.target.closest('[data-a]')?.getAttribute('data-a');
 			if (a === 'pick') setPicking(!picking);
 			if (a === 'done') closePop();
 			if (a === 'remove' && open) { open.el.removeAttribute('data-sp-pick'); picks.splice(picks.indexOf(open), 1); open = null; pop.style.display = 'none'; redraw(); }
@@ -170,13 +180,13 @@ export function overlay() {
 				redraw();
 				status.textContent = a === 'add' ? `Sent ${batch.length}. Adding to ${proj?.name ?? 'your project'}…` : `Sent ${batch.length}. Writing the prompt${batch.length > 1 ? 's' : ''}…`;
 				status.hidden = false;
-				window.__spSend?.(JSON.stringify({ url: location.href, title: document.title, picks: batch, action: a === 'add' ? 'add' : 'prompt' }));
+				window.__spSend?.(JSON.stringify({ url: location.href, title: document.title, picks: batch, action: a === 'add' ? 'add' : 'prompt', style }));
 			}
 		});
 		window.__spStatus = (t) => { status.textContent = t; status.hidden = !t; };
 		// out of every screenshot of a pick (the highlight would tint it)
 		window.__spHide = (v) => { host.style.display = v ? 'none' : ''; };
-		window.__spTest = { rect: (sel) => { const r = root.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, note: (t) => { note.value = t; }, status: () => (status.hidden ? '' : status.textContent) };
+		window.__spTest = { rect: (sel) => { const r = root.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, note: (t) => { note.value = t; }, style: setStyle, status: () => (status.hidden ? '' : status.textContent) };
 	};
 	start();
 }

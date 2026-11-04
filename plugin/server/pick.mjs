@@ -8,11 +8,12 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { connectOwn, goto, launch, ownChrome, wait } from './chrome.mjs';
+import { connectOwn, goto, launch, openTab, ownChrome, shot, viewport, wait } from './chrome.mjs';
 import { extract } from './component.mjs';
 import { ToolError } from './mcp.mjs';
 import { details, overlay } from './overlay.mjs';
 import { project } from './project.mjs';
+import { placer, tokens } from './place.mjs';
 
 let session = null; // { page, close, own, url, queue, waiter }
 
@@ -27,7 +28,7 @@ export async function open(url, { mode = 'auto', log = () => {} } = {}) {
 		const headless = process.env.SITE_PROMPT_PICK_HEADLESS === '1';
 		const b = await launch({ headless, width: 1440, height: 900, profileDir: headless ? null : path.join(os.homedir(), '.site-prompt', 'chrome-profile') });
 		if (url) await goto(b.page, url, { settle: 4000 });
-		conn = { page: b.page, close: b.close, own: false, url };
+		conn = { page: b.page, close: b.close, own: false, url, endpoint: b.endpoint, headless };
 	}
 	const s = { ...conn, queue: [], waiter: null };
 	await s.page.send('Runtime.addBinding', { name: '__spSend' });
@@ -59,6 +60,7 @@ export async function stop() {
 	if (!session) return;
 	const s = session;
 	session = null;
+	if (s.dev) { try { await s.dev.page.eval('window.__spPlacer?.remove()'); } catch {} if (s.dev.opened) await s.dev.close(); }
 	try { await s.page.eval(`document.querySelector('site-prompt-ui')?.remove(); window.__spOverlay = false;`); } catch {}
 	s.close();
 }
@@ -83,7 +85,9 @@ export async function processBatch(batch, baseDir, { log = () => {} } = {}) {
 		try {
 			await s.page.eval('window.__spHide?.(true)').catch(() => {});
 			const r = await extract(s.page, sel, dir, batch.url, { own: s.own, log }).finally(() => s.page.eval('window.__spHide?.(false)').catch(() => {}));
-			let asset = null;
+			await s.page.eval(`window.__spStatus?.(${JSON.stringify(`Checking ${p.n} at phone width…`)})`).catch(() => {});
+				r.mobile = await atPhoneWidth(s, sel, dir).catch(() => null);
+				let asset = null;
 			if (d.art?.src && /^https?:/.test(d.art.src) && d.art.kind !== 'video') asset = await download(d.art.src, dir, batch.url);
 			const md = pickPrompt({ pick: p, d, r, url: batch.url, asset, dir });
 			writeFileSync(path.join(dir, 'PROMPT.md'), md);
@@ -146,6 +150,16 @@ export function pickPrompt({ pick, d, r, url, asset, dir }) {
 		}
 		L.push('');
 	}
+	if (r.mobile) {
+		const m = r.mobile;
+		L.push('## On phones (390 px wide)');
+		if (m.hidden) L.push('The original hides it at this width. Hide it on phones too, or ask.');
+		else {
+			L.push(`It is ${m.size.join('×')} px there${m.shot ? ' (original-mobile.png)' : ''}. ${m.changes.length ? 'What the original changes at that width; do the same with a breakpoint:' : 'Its layout does not change; only the width follows its container.'}`);
+			for (const c of m.changes) L.push(`- ${px(c)}`);
+		}
+		L.push('');
+	}
 	if (pick.kind === 'text' || pick.kind === 'button') {
 		const t = d.type;
 		L.push('## Type');
@@ -176,6 +190,122 @@ export function pickPrompt({ pick, d, r, url, asset, dir }) {
 	L.push('');
 	L.push(`_From ${url}. For learning, a redesign, or your own product: if you ship it, make the copy and any logo your own._`);
 	return L.join('\n');
+}
+
+const LAYOUT = ['display', 'flexDirection', 'flexWrap', 'gridTemplateColumns', 'fontSize', 'lineHeight', 'letterSpacing', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'marginTop', 'marginBottom', 'rowGap', 'columnGap', 'textAlign', 'justifyContent', 'alignItems', 'position', 'order'];
+function layoutOf({ sel, props }) {
+	const root = document.querySelector(sel);
+	if (!root) return null;
+	const nodes = [root, ...root.querySelectorAll('*')].filter((e) => !['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE'].includes(e.tagName)).slice(0, 300);
+	return nodes.map((n) => {
+		const cs = getComputedStyle(n), r = n.getBoundingClientRect();
+		const o = { w: Math.round(r.width), h: Math.round(r.height), hidden: cs.display === 'none' || cs.visibility === 'hidden' || (!r.width && !r.height) };
+		for (const p of props) o[p] = p === 'gridTemplateColumns' ? (cs[p] === 'none' ? 'none' : `${cs[p].split(/\s+(?![^(]*\))/).length} columns`) : cs[p];
+		return o;
+	});
+}
+const kebab = (p) => p.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase());
+
+/** The same pick at 390 px wide: a screenshot and what its layout does there (it has to work on phones in their site too). */
+async function atPhoneWidth(s, sel, dir) {
+	const wide = await s.page.run(layoutOf, { sel, props: LAYOUT });
+	if (!wide) return null;
+	await viewport(s.page, 390, 844, false);
+	try {
+		await wait(450);
+		const box = await s.page.eval(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height }; })()`);
+		await wait(200);
+		const narrow = await s.page.run(layoutOf, { sel, props: LAYOUT });
+		if (!box || !narrow) return null;
+		const hidden = narrow[0].hidden;
+		if (!hidden && box.width >= 1 && box.height >= 1) {
+			const pad = 12;
+			writeFileSync(path.join(dir, 'original-mobile.png'), await shot(s.page, { beyond: !s.own, x: Math.max(0, Math.floor(box.x) - pad), y: Math.max(0, Math.floor(box.y) - pad), width: Math.min(390, Math.ceil(box.width) + pad * 2), height: Math.ceil(box.height) + pad * 2, format: 'png' }));
+		}
+		const changes = [];
+		for (let i = 0; i < Math.min(wide.length, narrow.length) && changes.length < 40; i++) {
+			const a = wide[i], b = narrow[i];
+			if (a.hidden !== b.hidden) { changes.push(`.c${i}: ${b.hidden ? 'hidden on phones' : 'only shown on phones'}`); continue; }
+			if (b.hidden) continue;
+			const d = LAYOUT.filter((p) => a[p] !== b[p]).map((p) => `${kebab(p)} ${a[p]} → ${b[p]}`);
+			if (d.length) changes.push(`.c${i}: ${d.join('; ')}`);
+		}
+		return { hidden, size: [Math.round(box.width), Math.round(box.height)], changes, shot: hidden ? null : 'original-mobile.png' };
+	} finally {
+		if (s.headless) await viewport(s.page, 1440, 900); else await s.page.send('Emulation.clearDeviceMetricsOverride').catch(() => {});
+		await wait(150);
+	}
+}
+
+/** Say something in the toolbar(s): the agent reports back where the person is looking. */
+export async function say(t) {
+	if (!session) return false;
+	for (const p of [session.page, session.dev?.page].filter(Boolean)) await p.eval(`window.__spStatus?.(${JSON.stringify(String(t).slice(0, 140))})`).catch(() => {});
+	return true;
+}
+
+/**
+ * Their running site beside the one they pick from: they click where each pick goes. Returns the placements (or null
+ * when they did not place within `seconds`), a screenshot of the spot, and their site's design tokens.
+ */
+export async function place(devUrl, picks, { seconds = 300, wantTokens = false } = {}) {
+	const s = session;
+	if (!s) return null;
+	const want = new URL(devUrl);
+	if (s.dev) {
+		const href = await s.dev.page.eval('location.href').catch(() => null);
+		if (!href) s.dev = null;
+	}
+	if (!s.dev) {
+		const t = await openTab(s, want.href);
+		s.dev = { ...t, opened: true, queue: [], waiter: null };
+		const d = s.dev;
+		await d.page.send('Runtime.addBinding', { name: '__spSend' });
+		d.page.on('Runtime.bindingCalled', (e) => {
+			if (e.name !== '__spSend') return;
+			try { d.queue.push(JSON.parse(e.payload)); } catch { return; }
+			d.waiter?.();
+		});
+		// a hot reload while they place puts the placer back
+		d.page.on('Page.loadEventFired', () => { if (d.placing) d.page.eval(d.src).catch(() => {}); });
+		if (s.headless) await viewport(d.page, 1440, 900);
+	} else {
+		await s.dev.page.send('Page.bringToFront').catch(() => {});
+	}
+	const d = s.dev;
+	d.queue.length = 0;
+	d.src = `window.__spPlace = ${JSON.stringify({ picks: picks.map((p) => ({ n: p.n, label: p.label })) })}; (${placer.toString()})()`;
+	d.placing = true;
+	await d.page.eval(d.src);
+	const got = d.queue.length ? d.queue.shift() : await new Promise((res) => {
+		const t = setTimeout(() => res(null), seconds * 1000);
+		d.waiter = () => { clearTimeout(t); res(d.queue.shift() ?? null); };
+	});
+	d.waiter = null;
+	d.placing = false;
+	let snapshot = null, design = null;
+	if (got?.placed?.length) {
+		// the page with the spot marked, as the person saw it
+		const first = got.placed[0];
+		await d.page.eval(`document.querySelector('[data-sp-place="${first.n}"]')?.scrollIntoView({ block: 'center' })`).catch(() => {});
+		await wait(250);
+		const vp = await d.page.eval('({ x: scrollX, y: scrollY, w: innerWidth, h: innerHeight })').catch(() => ({ x: 0, y: 0, w: 1440, h: 900 }));
+		snapshot = await shot(d.page, { beyond: false, x: vp.x, y: vp.y, width: vp.w, height: vp.h, format: 'jpeg', quality: 80 }).catch(() => null);
+		await d.page.eval(`document.querySelectorAll('[data-sp-place]').forEach((e) => e.removeAttribute('data-sp-place'))`).catch(() => {});
+	}
+	if (wantTokens) design = await d.page.run(tokens).catch(() => null);
+	return { ...(got ?? { placed: [], skipped: picks.map((p) => p.n) }), timedOut: !got, snapshot, design };
+}
+
+/** Their design tokens from the running site, without placing anything. */
+export async function devTokens(devUrl) {
+	const s = session;
+	if (!s) return null;
+	if (!s.dev) {
+		const t = await openTab(s, new URL(devUrl).href);
+		s.dev = { ...t, opened: true, queue: [], waiter: null };
+	}
+	return s.dev.page.run(tokens).catch(() => null);
 }
 
 export { wait };

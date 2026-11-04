@@ -46,13 +46,17 @@ or says "pick", "hover", "point at":
 When the person is working in a project (the folder you run in has a package.json or an index.html) and wants
 something from another site in it ("grab Linear's pricing card", "I want that button on my landing page"):
 
-1. Pick mode as above. The toolbar then offers **Add to <project>** next to Get prompts, and the note box asks
-   where it should go. Tell them they can click several things and say where each goes in the note.
-2. When they press Add, `site_pick` returns ADD TO THE PROJECT with each pick's folder (PROMPT.md, component.html,
-   screenshots) and the project's stack. Build each one into their code in their conventions with the exact values,
-   place it where the note says (ask in one line if it says nothing), then `site_match` it against the pick in
-   their running dev server and fix what it flags. Report in a few lines; do not paste the prompts.
-3. If they named the site and the thing in words and you can find it yourself, `site_component` with a selector
+1. Pick mode as above. The toolbar then offers **Exact | My style** and **Add to <project>**. Tell them in one or two
+   lines: click what you like, choose Exact (pixel for pixel) or My style (same layout and motion in your fonts and
+   colours), press Add, then click where it goes in your site.
+2. When they press Add and their dev server is running (found by itself, or pass `dev_url`), their site opens in a new
+   tab and they click where each pick goes (a line shows above or below, Alt replaces). `site_pick` then returns ADD
+   TO THE PROJECT with each pick's folder, the spot (element, path, text) and the source file and line it is in,
+   their design when they chose My style, and how each pick changes on phones.
+3. Build each one in, in their conventions, at that spot. `site_match` it in the dev server and fix what it flags.
+   Then `site_pick` with `say` ("✓ Added to Hero.tsx, 99% match") answers in their toolbar and keeps waiting for more.
+   In the chat, report in a few lines; do not paste the prompts.
+4. If they named the site and the thing in words and you can find it yourself, `site_component` with a selector
    gets the same folder without them picking; then build it in the same way.
 
 One part by selector, without the person clicking: `site_component` with url and selector.

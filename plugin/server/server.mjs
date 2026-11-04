@@ -13,7 +13,8 @@ import { compose } from './prompt.mjs';
 import { read } from './read.mjs';
 import { buildStack } from './stack.mjs';
 import * as pick from './pick.mjs';
-import { project } from './project.mjs';
+import { devUrl, project } from './project.mjs';
+import { fileTokens, findSource } from './place.mjs';
 import { match } from './match.mjs';
 
 const VERSION = '0.1.0';
@@ -126,10 +127,13 @@ Show the person, in this order:
 				mode: { type: 'string', enum: ['auto', 'own', 'window'], description: 'auto (default): their own Chrome when reachable, else a window' },
 				wait: { type: 'number', description: 'seconds to wait for picks (default 240, at most 600)' },
 				stop: { type: 'boolean', description: 'close the picking session' },
+				dev_url: { type: 'string', description: 'where the person\'s own site runs in dev (e.g. http://localhost:3000/pricing); found by itself when omitted' },
+				say: { type: 'string', description: 'a short line to show in the picker toolbar, e.g. "✓ Added to Hero.tsx, 99% match" (then it keeps waiting for picks unless wait is 0)' },
 			},
 		},
 		run: async (a) => {
 			if (a.stop) { await pick.stop(); return 'Closed the picker.'; }
+			if (a.say && pick.active()) { await pick.say(a.say); if (Number(a.wait) === 0) return 'Shown in the toolbar.'; }
 			let opened = '';
 			if (a.url || !pick.active()) {
 				if (!a.url) throw new ToolError('url: the site to pick from (no picking session is open).');
@@ -144,22 +148,51 @@ Show the person, in this order:
 			const failed = results.filter((x) => x.error).map((x) => `\nCould not read ${x.n} (${x.label}): ${x.error}`).join('');
 			const proj = project();
 			if (batch.action === 'add' && good.length) {
-				// building: the agent puts each pick into the project itself; no prompts to copy around
-				const out = [text(`${opened}ADD TO THE PROJECT: the person picked ${good.length} thing${good.length > 1 ? 's' : ''} on ${batch.url} and wants ${good.length > 1 ? 'them' : 'it'} in ${proj ? `their project "${proj.name}" (${proj.dir.replace(os.homedir(), '~')}): ${proj.framework}, ${proj.styling}${proj.ts ? ', TypeScript' : ''}${proj.motion.length ? `, ${proj.motion.join(', ')}` : ''}${proj.components ? `; components live in ${proj.components}/` : ''}` : 'the project in the current folder'}.${failed}
+				// building: the person shows where each pick goes in their running site, the agent builds it in
+				const dev = a.dev_url ? urlOf(a.dev_url) : await devUrl(proj);
+				const mine = batch.style === 'mine';
+				let placed = null, design = null;
+				if (dev) {
+					await pick.say(`Now click where ${good.length > 1 ? 'each one goes' : 'it goes'} in your site`);
+					placed = await pick.place(dev, good, { wantTokens: mine, seconds: 300 }).catch(() => null);
+					design = placed?.design ?? null;
+				}
+				if (mine && !design) design = proj ? fileTokens(proj.dir) : null;
+				const where = new Map((placed?.placed ?? []).map((p) => [p.n, p]));
+				const stackLine = proj ? `their project "${proj.name}" (${proj.dir.replace(os.homedir(), '~')}): ${proj.framework}, ${proj.styling}${proj.ts ? ', TypeScript' : ''}${proj.motion.length ? `, ${proj.motion.join(', ')}` : ''}${proj.components ? `; components live in ${proj.components}/` : ''}` : 'the project in the current folder';
+				const tw = /Tailwind/.test(proj?.styling ?? '');
+				const styleRule = mine
+					? `STYLE: MY STYLE. Keep the pick's structure, layout, proportions, spacing rhythm, states and motion exactly, but dress it in the person's design: their fonts, colours, radius, shadows and button look (their design is below${design ? '' : ': none was found, so read their CSS/theme and use it'}). Map each of the pick's colours to their closest role (background, surface, text, muted, accent, border); use their CSS variables or theme tokens by name, never raw copies of the pick's colours. site_match is a guide only here: sizes should match, colours will not.`
+					: `STYLE: EXACT. Keep every value exact: sizes, spacing, colours, radius, shadows, type, transitions, hover/focus/press states.${tw ? ' In Tailwind use arbitrary values (e.g. rounded-[12px], shadow-[...]) where no utility is the same value; never round to the nearest utility.' : ''}`;
+				const out = [text(`${opened}ADD TO THE PROJECT: the person picked ${good.length} thing${good.length > 1 ? 's' : ''} on ${batch.url} and wants ${good.length > 1 ? 'them' : 'it'} in ${stackLine}.${failed}
+${styleRule}
+${dev ? (placed?.placed?.length ? `They showed where in their running site (${placed.url}): each pick below says the spot and the source file it is in.` : placed?.timedOut ? `Their site is running at ${dev} but they did not show where within 5 minutes.` : `They skipped showing where.`) : 'Their site is not running (no dev server found), so the spot comes from the note.'}
 
 Do it now, for each pick below:
-1. Read its PROMPT.md and component.html (paths below): the exact markup, every computed style, states, fonts. Look at its screenshot.
-2. Build it as a component in this project, following its conventions (folder, naming, ${proj?.ts ? 'TypeScript, ' : ''}${proj?.styling ?? 'its styling'}). Keep every value exact: sizes, spacing, colours, radius, shadows, type, transitions, hover/focus/press states. ${/Tailwind/.test(proj?.styling ?? '') ? 'In Tailwind use arbitrary values (e.g. rounded-[12px], shadow-[...]) where no utility is the same value; never round to the nearest utility. ' : ''}Add the font if the project lacks it (or the closest free match, and say so). Replace their copy and logo with the person's own when it is obvious; otherwise keep the copy as a placeholder and say so.
-3. Put it where the person's note says. With no note, add it as a component and ask in one line where it should go.
-4. If the dev server is running, check it: site_match with the pick folder, the local url, and a selector for your component. Fix what it flags (at most three rounds).
-Then tell the person in a few lines what you added, where, and how close the match is. The picker stays open: call site_pick again (no url) to wait for more.`)];
+1. Read its PROMPT.md and component.html (paths below): the exact markup, every computed style, states, fonts, and how it changes on phones. Look at its screenshot.
+2. Build it as a component in this project, following its conventions (folder, naming, ${proj?.ts ? 'TypeScript, ' : ''}${proj?.styling ?? 'its styling'}). Make it responsive the way the original is (the "On phones" section). ${mine ? '' : 'Add the font if the project lacks it (or the closest free match, and say so). '}Replace their copy and logo with the person's own when it is obvious; otherwise keep the copy as a placeholder and say so.
+3. Put it at the spot: open the source file named, find the element by its text and classes, and insert the component above it, below it, or in place of it as asked. With no spot and no note, ask in one line where it should go.
+4. Check it: site_match with the pick folder, the page url and a selector for your component${mine ? ' (sizes and layout only)' : ''}. Fix what it flags (at most three rounds).
+5. Tell them in the toolbar: site_pick with say (e.g. "✓ Added to Hero.tsx, 99% match"); that call keeps waiting for more picks. In the chat, report in a few lines; do not paste the prompts.`)];
+				if (design) out.push(text(`THEIR DESIGN (from ${placed?.design ? 'their running site' : 'their stylesheets'}):\n${JSON.stringify(design, null, 1).slice(0, 6000)}`));
 				for (const x of good) {
+					const w = where.get(x.n);
+					let spot = '';
+					if (w) {
+						const files = proj ? findSource(proj.dir, w.at) : [];
+						spot = `\nGoes: ${w.where === 'replace' ? 'IN PLACE OF' : w.where === 'before' ? 'ABOVE' : 'BELOW'} <${w.at.tag}${w.at.id ? ` id="${w.at.id}"` : ''}${w.at.classes.length ? ` class="${w.at.classes.join(' ')}"` : ''}> on ${w.at.page}${w.at.text ? ` (text: "${w.at.text.slice(0, 80)}")` : ''}${w.at.heading ? ` in the part headed "${w.at.heading.slice(0, 60)}"` : ''}
+Path: ${w.at.path}${w.at.source.components.length ? `\nInside components: ${w.at.source.components.join(' < ')}` : ''}
+Source: ${files.length ? files.map((f) => `${f.file}${f.line ? `:${f.line}` : ''} (${f.why})`).join(', ') : 'not found by search; look for the text above'}
+Markup there: ${w.at.html.slice(0, 300)}`;
+					} else if (placed) spot = '\nGoes: not shown (skipped).';
 					out.push(text(`── ${x.n}. ${x.label}${x.note ? ` · note: "${x.note}"` : ''}
 Folder: ${x.dir}
 PROMPT.md: ${path.join(x.dir, 'PROMPT.md')} · component.html: ${x.r.file}
-${x.r.size.original.join('×')} px · ${x.r.snap.nodes} elements · ${x.r.stateRules.length} state rules · fonts: ${x.r.code.fonts.map((f) => f.family).join(', ') || 'system'}`));
+${x.r.size.original.join('×')} px · ${x.r.snap.nodes} elements · ${x.r.stateRules.length} state rules · fonts: ${x.r.code.fonts.map((f) => f.family).join(', ') || 'system'}${x.r.mobile ? ` · phones: ${x.r.mobile.hidden ? 'hidden' : `${x.r.mobile.size.join('×')}, ${x.r.mobile.changes.length} layout changes`}` : ''}${spot}`));
 					if (existsSync(path.join(x.dir, 'original.png'))) out.push(image(readFileSync(path.join(x.dir, 'original.png')), 'image/png'));
 				}
+				if (placed?.snapshot) { out.push(text('Their page, with the spot marked:')); out.push(image(placed.snapshot, 'image/jpeg')); }
+				await pick.say(placed?.placed?.length ? `Building it in…` : `Your agent is adding it`);
 				return out;
 			}
 			const all = good.map((x) => x.md).join('\n\n---\n\n');
