@@ -14,24 +14,9 @@ export function placer() {
 		const host = document.createElement('site-prompt-place');
 		host.style.cssText = 'all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647';
 		const root = host.attachShadow({ mode: 'closed' });
-		root.innerHTML = `<style>
-			*{box-sizing:border-box;font-family:ui-sans-serif,-apple-system,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-			.hl{position:fixed;pointer-events:none;border:1px dashed rgba(79,140,255,.8);border-radius:6px;display:none}
-			.hl.rep{border:1.5px solid #4f8cff;background:rgba(79,140,255,.1)}
-			.line{position:fixed;pointer-events:none;height:3px;border-radius:2px;background:#4f8cff;display:none;box-shadow:0 0 0 2px rgba(255,255,255,.9)}
-			.line:before,.line:after{content:"";position:absolute;top:-3px;width:9px;height:9px;border-radius:50%;background:#4f8cff}
-			.line:before{left:-5px}.line:after{right:-5px}
-			.chip{position:fixed;pointer-events:none;display:none;background:#4f8cff;color:#fff;font-size:11px;font-weight:600;line-height:1;padding:5px 7px;border-radius:6px;white-space:nowrap}
-			.chip i{font-style:normal;opacity:.75;font-weight:500;margin-left:5px}
-			.pin{position:fixed;pointer-events:none;height:3px;border-radius:2px;background:#4f8cff}
-			.pin b{position:absolute;left:-12px;top:-9px;width:20px;height:20px;border-radius:50%;background:#4f8cff;color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;box-shadow:0 0 0 2px #fff}
-			.bar{position:fixed;right:18px;bottom:18px;pointer-events:auto;display:flex;align-items:center;gap:6px;padding:6px 6px 6px 14px;background:rgba(20,20,22,.9);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);border:1px solid rgba(255,255,255,.08);border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.28);color:#f4f4f5;font-size:13px;user-select:none}
-			.q b{font-weight:600}.q span{color:#a1a1aa;margin-left:6px;font-size:12px}
-			.btn{appearance:none;border:0;height:28px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:550;color:#e4e4e7;background:transparent;cursor:pointer}
-			.btn:hover{background:rgba(255,255,255,.08)}
-		</style>
-		<div class="hl"></div><div class="line"></div><div class="chip"></div><div class="pins"></div>
-		<div class="bar"><span class="q"></span><button class="btn" data-a="skip">Skip</button></div>`;
+		root.innerHTML = `<style>${window.__spTheme || ''}</style>
+		<div class="hl place"></div><div class="line"></div><div class="chip"></div><div class="pins"></div>
+		<div class="bar surface busy"><span class="beam"></span><div class="mark">${window.__spIcons?.cursor ?? ''}</div><span class="q"></span><span class="sep"></span><button class="btn" data-a="skip">Skip</button></div>`;
 		document.documentElement.appendChild(host);
 		const $ = (s) => root.querySelector(s);
 		const hl = $('.hl'), line = $('.line'), chip = $('.chip'), pins = $('.pins'), q = $('.q'), bar = $('.bar');
@@ -41,7 +26,7 @@ export function placer() {
 		const ask = () => {
 			const p = cfg.picks[i];
 			if (!p) return;
-			q.innerHTML = `Where does <b>${p.n}. ${p.label.split(' · ')[0]}</b> go?<span>${cfg.picks.length > 1 ? `${i + 1} of ${cfg.picks.length} · ` : ''}Alt replaces</span>`;
+			q.innerHTML = `Where does <b>${p.n}. ${p.label.split(' · ')[0]}</b> go? <span>${cfg.picks.length > 1 ? `${i + 1} of ${cfg.picks.length} · ` : ''}<kbd>⌥</kbd> replaces</span>`;
 		};
 		const name = (el) => {
 			const id = el.id ? `#${el.id}` : '';
@@ -56,8 +41,11 @@ export function placer() {
 			if (alt) line.style.display = 'none';
 			else Object.assign(line.style, { display: 'block', left: r.left + 'px', width: Math.max(24, r.width) + 'px', top: (where === 'before' ? r.top - 3 : r.bottom + 1) + 'px' });
 			chip.innerHTML = `${alt ? 'Replace' : where === 'before' ? 'Above' : 'Below'}<i>${name(cur)}</i>`;
-			const y = where === 'before' || alt ? r.top - 28 : r.bottom + 10;
-			Object.assign(chip.style, { display: 'block', left: Math.max(6, Math.min(innerWidth - 240, r.left)) + 'px', top: Math.max(6, Math.min(innerHeight - 30, y)) + 'px' });
+			// at the right end of the line, sitting on it, so it never covers what is under the line
+			const y = alt ? r.top + 8 : (where === 'before' ? r.top - 3 : r.bottom + 1) - 12;
+			chip.style.display = 'flex';
+			const w = chip.offsetWidth;
+			Object.assign(chip.style, { left: Math.max(6, Math.min(innerWidth - w - 6, r.left + Math.max(24, r.width) - w - (alt ? 8 : 0))) + 'px', top: Math.max(6, Math.min(innerHeight - 30, y)) + 'px' });
 		};
 		const drawPins = () => {
 			pins.innerHTML = '';
@@ -90,7 +78,8 @@ export function placer() {
 			const out = placed.map((p) => ({ n: p.n, where: p.where, at: p.info }));
 			for (const p of placed) p.el.setAttribute('data-sp-place', String(p.n));
 			window.__spSend?.(JSON.stringify({ action: 'place', url: location.href, title: document.title, placed: out, skipped: cfg.picks.filter((p) => !placed.some((x) => x.n === p.n)).map((p) => p.n) }));
-			q.innerHTML = placed.length ? `<b>Got it.</b><span>Your agent is building it in</span>` : `<b>Skipped.</b><span>Your agent will ask where</span>`;
+			q.innerHTML = placed.length ? `<b>Got it.</b> <span>Your agent is building it in</span>` : `<b>Skipped.</b> <span>Your agent will ask where</span>`;
+			$('.sep').hidden = true;
 			$('[data-a=skip]').hidden = true;
 		};
 		const onClick = (e) => {
@@ -118,7 +107,7 @@ export function placer() {
 			host.remove();
 		};
 		window.__spPlacer = { restart: () => { teardown(); window.__spPlacer = null; placer(); }, remove: () => { teardown(); window.__spPlacer = null; } };
-		window.__spStatus = (t) => { q.innerHTML = `<b>${t.replace(/</g, '&lt;')}</b>`; bar.style.display = t ? '' : 'none'; };
+		window.__spStatus = (t) => { const ok = /^✓/.test(t || ''); q.innerHTML = `<b>${String(t).replace(/^✓\s*/, '').replace(/</g, '&lt;')}</b>`; bar.style.display = t ? '' : 'none'; bar.classList.toggle('busy', !ok); };
 		window.__spHide = (v) => { host.style.display = v ? 'none' : ''; };
 		window.__spTest = { place: (sel, how = 'after') => { const el = document.querySelector(sel); placed.push({ n: cfg.picks[i].n, el, where: how, info: window.__spWhere(el) }); i++; if (i >= cfg.picks.length) finish(); else ask(); }, status: () => q.textContent };
 	};

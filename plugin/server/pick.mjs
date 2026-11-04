@@ -14,6 +14,8 @@ import { ToolError } from './mcp.mjs';
 import { details, overlay } from './overlay.mjs';
 import { project } from './project.mjs';
 import { placer, tokens } from './place.mjs';
+import { ICONS, THEME } from './theme.mjs';
+const LOOK = `window.__spTheme = ${JSON.stringify(THEME)}; window.__spIcons = ${JSON.stringify(ICONS)};`;
 
 let session = null; // { page, close, own, url, queue, waiter }
 
@@ -39,7 +41,7 @@ export async function open(url, { mode = 'auto', log = () => {} } = {}) {
 	});
 	// building a project? the toolbar offers to add picks straight to it
 	const proj = project();
-	const src = `window.__spProject = ${JSON.stringify(proj ? { name: proj.name } : null)}; (${overlay.toString()})()`;
+	const src = `${LOOK} window.__spProject = ${JSON.stringify(proj ? { name: proj.name } : null)}; (${overlay.toString()})()`;
 	await s.page.send('Page.addScriptToEvaluateOnNewDocument', { source: src });
 	await s.page.eval(src);
 	s.page.router?.on?.('close', () => { if (session === s) session = null; });
@@ -274,7 +276,7 @@ export async function place(devUrl, picks, { seconds = 300, wantTokens = false }
 	}
 	const d = s.dev;
 	d.queue.length = 0;
-	d.src = `window.__spPlace = ${JSON.stringify({ picks: picks.map((p) => ({ n: p.n, label: p.label })) })}; (${placer.toString()})()`;
+	d.src = `${LOOK} window.__spPlace = ${JSON.stringify({ picks: picks.map((p) => ({ n: p.n, label: p.label })) })}; (${placer.toString()})()`;
 	d.placing = true;
 	await d.page.eval(d.src);
 	const got = d.queue.length ? d.queue.shift() : await new Promise((res) => {

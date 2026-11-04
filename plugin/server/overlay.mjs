@@ -11,65 +11,42 @@ export function overlay() {
 		const host = document.createElement('site-prompt-ui');
 		host.style.cssText = 'all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647';
 		const root = host.attachShadow({ mode: 'closed' });
-		root.innerHTML = `<style>
-			*{box-sizing:border-box;font-family:ui-sans-serif,-apple-system,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-			.hl{position:fixed;pointer-events:none;border:1.5px solid #4f8cff;background:rgba(79,140,255,.07);border-radius:6px;display:none;transition:left 70ms,top 70ms,width 70ms,height 70ms}
-			.chip{position:fixed;pointer-events:none;display:none;background:#4f8cff;color:#fff;font-size:11px;font-weight:600;line-height:1;padding:5px 7px;border-radius:6px;white-space:nowrap;letter-spacing:.01em}
-			.chip i{font-style:normal;opacity:.75;font-weight:500;margin-left:6px}
-			.badge{position:fixed;pointer-events:none;width:20px;height:20px;border-radius:50%;background:#4f8cff;color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;box-shadow:0 0 0 2px #fff,0 4px 10px rgba(0,0,0,.25)}
-			.ring{position:fixed;pointer-events:none;border:1.5px solid #4f8cff;border-radius:6px}
-			.bar{position:fixed;right:18px;bottom:18px;pointer-events:auto;display:flex;align-items:center;gap:6px;padding:6px;background:rgba(20,20,22,.9);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);border:1px solid rgba(255,255,255,.08);border-radius:999px;box-shadow:0 10px 30px rgba(0,0,0,.28),0 1px 0 rgba(255,255,255,.06) inset;color:#f4f4f5;font-size:13px;user-select:none}
-			.mark{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(180deg,#5d97ff,#3b6fe0)}
-			.mark svg{width:14px;height:14px}
-			.btn{appearance:none;border:0;height:28px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:550;color:#e4e4e7;background:transparent;cursor:pointer;display:flex;align-items:center;gap:6px}
-			.btn:hover{background:rgba(255,255,255,.08)}
-			.btn.on{background:rgba(79,140,255,.18);color:#9ec0ff}
-			.btn.primary{background:#fff;color:#111}
-			.btn.primary:hover{background:#e9e9ec}
-			.btn[disabled]{opacity:.4;cursor:default;background:transparent;color:#e4e4e7}
-			.count{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:rgba(255,255,255,.14);font-size:11px;font-weight:700;display:grid;place-items:center}
-			.status{padding:0 8px 0 4px;color:#a1a1aa;font-size:12px;white-space:nowrap}
-			.pop{position:fixed;pointer-events:auto;width:272px;padding:12px;background:rgba(20,20,22,.94);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.08);border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.32);color:#f4f4f5;display:none}
-			.pop .k{font-size:12px;color:#a1a1aa;margin-bottom:8px}
-			.pop .k b{color:#f4f4f5;font-weight:600}
-			.pop textarea{width:100%;height:64px;resize:none;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:#f4f4f5;border-radius:9px;padding:8px 10px;font-size:13px;outline:none}
-			.pop textarea:focus{border-color:#4f8cff}
-			.pop .row{display:flex;justify-content:space-between;margin-top:10px}
-			.seg{display:flex;padding:2px;border-radius:999px;background:rgba(255,255,255,.07)}
-			.seg button{appearance:none;border:0;height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:550;color:#a1a1aa;background:transparent;cursor:pointer}
-			.seg button.on{background:rgba(255,255,255,.14);color:#fff}
-			.hint{position:fixed;left:50%;bottom:72px;transform:translateX(-50%);pointer-events:none;background:rgba(20,20,22,.9);color:#e4e4e7;font-size:12.5px;padding:8px 12px;border-radius:999px;white-space:nowrap;transition:opacity .3s}
-		</style>
+		root.innerHTML = `<style>${window.__spTheme || ''}</style>
 		<div class="hl"></div><div class="chip"></div><div class="marks"></div>
-		<div class="hint">Hover anything you like, click to pick it, then Get prompts</div>
-		<div class="pop"><div class="k"></div><textarea placeholder="What do you like about it? (optional)"></textarea>
-			<div class="row"><button class="btn" data-a="remove">Remove</button><button class="btn primary" data-a="done">Done</button></div></div>
-		<div class="bar">
-			<div class="mark"><svg viewBox="0 0 16 16" fill="none"><path d="M3 2.5l9.5 5-4 1.2-1.6 4.3L3 2.5z" fill="#fff"/></svg></div>
-			<button class="btn on" data-a="pick">Pick</button>
+		<div class="hint surface"><b>Hover</b> anything you like, <b>click</b> to pick it, then <b>Get prompts</b></div>
+		<div class="pop surface"><span class="beam"></span>
+			<div class="head k"></div><div class="rule"></div>
+			<textarea placeholder="What do you like about it? (optional)"></textarea>
+			<div class="rule"></div>
+			<div class="foot"><button class="btn ghost" data-a="remove">${window.__spIcons?.trash ?? ''}Remove</button><button class="btn done" data-a="done">Done <kbd>↵</kbd></button></div></div>
+		<div class="bar surface"><span class="beam"></span>
+			<div class="mark">${window.__spIcons?.cursor ?? ''}</div>
+			<button class="btn on" data-a="pick" title="Pick (Esc)">${window.__spIcons?.pick ?? ''}Pick</button>
 			<span class="count">0</span>
-			<button class="btn" data-a="send" disabled>Get prompts</button>
+			<span class="sep"></span>
+			<button class="btn" data-a="send" disabled>${window.__spIcons?.prompt ?? ''}Get prompts</button>
 			<div class="seg" hidden><button data-s="exact" title="Pixel for pixel, as it is on this site">Exact</button><button data-s="mine" title="Same layout and motion, in your site's fonts, colours and radius">My style</button></div>
-				<button class="btn primary" data-a="add" disabled hidden>Add to project</button>
+			<button class="btn primary" data-a="add" disabled hidden>${window.__spIcons?.add ?? ''}Add to project</button>
 			<span class="status" hidden></span>
 		</div>`;
 		document.documentElement.appendChild(host);
 		const $ = (s) => root.querySelector(s);
 		const hl = $('.hl'), chip = $('.chip'), marks = $('.marks'), pop = $('.pop'), note = $('textarea'), hint = $('.hint');
-		const pickBtn = $('[data-a=pick]'), sendBtn = $('[data-a=send]'), addBtn = $('[data-a=add]'), count = $('.count'), status = $('.status');
+		const bar = $('.bar'), pickBtn = $('[data-a=pick]'), sendBtn = $('[data-a=send]'), addBtn = $('[data-a=add]'), count = $('.count'), status = $('.status');
 		const proj = window.__spProject;
 		if (proj) {
 			// building something: adding it is the main action, a prompt the other
 			addBtn.hidden = false;
 				$('.seg').hidden = false;
-			addBtn.textContent = `Add to ${proj.name.length > 18 ? 'project' : proj.name}`;
-			note.placeholder = 'What do you like, or where should it go? (optional)';
-			hint.textContent = 'Hover anything you like, click to pick it, then add it to your project';
+			addBtn.innerHTML = `${window.__spIcons?.add ?? ''}Add to ${(proj.name.length > 18 ? 'project' : proj.name).replace(/</g, '&lt;')}`;
+			note.placeholder = 'What do you like about it, or where should it go? (optional)';
+			hint.innerHTML = '<b>Hover</b> anything you like, <b>click</b> to pick it, then <b>Add</b> it to your project';
 		} else sendBtn.classList.add('primary');
-		let style = sessionStorage.getItem('__spStyle') || 'exact';
-			const setStyle = (v) => { style = v; try { sessionStorage.setItem('__spStyle', v); } catch {} for (const b of root.querySelectorAll('.seg button')) b.classList.toggle('on', b.dataset.s === v); };
+		const store = { get: (k) => { try { return sessionStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch {} } };
+		let style = store.get('__spStyle') || 'exact';
+			const setStyle = (v) => { style = v; store.set('__spStyle', v); for (const b of root.querySelectorAll('.seg button')) b.classList.toggle('on', b.dataset.s === v); };
 			setStyle(style);
-			let picking = true, cur = null, open = null, n = +(sessionStorage.getItem('__spN') || 0);
+			let picking = true, cur = null, open = null, n = +(store.get('__spN') || 0);
 		const picks = [];
 		setTimeout(() => (hint.style.opacity = '0'), 6000);
 
@@ -97,10 +74,10 @@ export function overlay() {
 			return r;
 		};
 		const show = () => {
-			if (!cur || !picking) { hl.style.display = chip.style.display = 'none'; return; }
+			if (!cur || !picking || open) { hl.style.display = chip.style.display = 'none'; return; }
 			const r = place(hl, cur);
 			chip.innerHTML = describe(cur).label;
-			Object.assign(chip.style, { display: 'block', left: Math.max(6, Math.min(innerWidth - 200, r.left - 3)) + 'px', top: (r.top > 32 ? r.top - 28 : Math.min(innerHeight - 30, r.bottom + 8)) + 'px' });
+			Object.assign(chip.style, { display: 'flex', left: Math.max(6, Math.min(innerWidth - 200, r.left - 3)) + 'px', top: (r.top > 32 ? r.top - 28 : Math.min(innerHeight - 30, r.bottom + 8)) + 'px' });
 		};
 		const target = (el) => {
 			const svg = el.closest && el.closest('svg');
@@ -119,6 +96,7 @@ export function overlay() {
 				marks.append(ring, b);
 			}
 			count.textContent = String(picks.length);
+			count.classList.toggle('has', picks.length > 0);
 			sendBtn.disabled = addBtn.disabled = !picks.length;
 		};
 		const loop = () => { if (picks.length) redraw(); if (cur && picking) show(); requestAnimationFrame(loop); };
@@ -126,10 +104,11 @@ export function overlay() {
 		const openPop = (p) => {
 			open = p;
 			const r = p.el.getBoundingClientRect();
-			$('.k').innerHTML = `<b>${p.n}. ${NAME[p.kind]}</b> · ${describe(p.el).plain.split(' · ')[1]}`;
+			$('.k').innerHTML = `<span class="num">${p.n}</span><b>${NAME[p.kind]}</b><span class="dim">${describe(p.el).plain.split(' · ')[1]}</span><kbd>esc</kbd>`;
 			note.value = p.note;
-			const left = Math.max(10, Math.min(innerWidth - 284, r.right + 12 > innerWidth - 284 ? r.left : r.right + 12));
-			const top = Math.max(10, Math.min(innerHeight - 160, r.top));
+			// under the pick (over it when there is no room), never covering it unless it fills the screen
+			const H = 196, left = Math.max(10, Math.min(innerWidth - 352, r.left));
+			const top = r.bottom + 12 + H < innerHeight - 70 ? r.bottom + 12 : r.top - 12 - H > 10 ? r.top - 12 - H : Math.max(10, Math.min(innerHeight - H - 80, r.top + 12));
 			Object.assign(pop.style, { display: 'block', left: left + 'px', top: top + 'px' });
 			setTimeout(() => note.focus(), 0);
 		};
@@ -153,7 +132,7 @@ export function overlay() {
 			if (existing) return openPop(existing);
 			const d = describe(cur);
 			const p = { n: ++n, el: cur, kind: d.kind, label: d.plain, note: '' };
-			sessionStorage.setItem('__spN', String(n));
+			store.set('__spN', String(n));
 			cur.setAttribute('data-sp-pick', String(p.n));
 			picks.push(p);
 			hint.style.opacity = '0';
@@ -180,10 +159,12 @@ export function overlay() {
 				redraw();
 				status.textContent = a === 'add' ? `Sent ${batch.length}. Adding to ${proj?.name ?? 'your project'}…` : `Sent ${batch.length}. Writing the prompt${batch.length > 1 ? 's' : ''}…`;
 				status.hidden = false;
+				status.classList.remove('ok');
+				bar.classList.add('busy');
 				window.__spSend?.(JSON.stringify({ url: location.href, title: document.title, picks: batch, action: a === 'add' ? 'add' : 'prompt', style }));
 			}
 		});
-		window.__spStatus = (t) => { status.textContent = t; status.hidden = !t; };
+		window.__spStatus = (t) => { const ok = /^✓/.test(t || ''); status.textContent = ok ? t.replace(/^✓\s*/, '') : t; status.hidden = !t; status.classList.toggle('ok', ok); bar.classList.toggle('busy', !!t && !ok && !/^Could not/.test(t)); };
 		// out of every screenshot of a pick (the highlight would tint it)
 		window.__spHide = (v) => { host.style.display = v ? 'none' : ''; };
 		window.__spTest = { rect: (sel) => { const r = root.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, note: (t) => { note.value = t; }, style: setStyle, status: () => (status.hidden ? '' : status.textContent) };
