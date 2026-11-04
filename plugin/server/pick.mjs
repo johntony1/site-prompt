@@ -98,14 +98,14 @@ export async function processBatch(batch, baseDir, { log = () => {} } = {}) {
 			} else if (d.art?.src && /^https?:/.test(d.art.src) && d.art.kind !== 'video') asset = await download(d.art.src, dir, batch.url);
 			const md = pickPrompt({ pick: p, d, r, url: batch.url, asset, dir });
 			writeFileSync(path.join(dir, 'PROMPT.md'), md);
-			out.push({ ...p, dir, md, r, d });
+			out.push({ ...p, dir, md, r, d, asset });
 		} catch (e) {
 			out.push({ ...p, error: String(e.message ?? e) });
 		}
 		await s.page.eval(`document.querySelector(${JSON.stringify(sel)})?.removeAttribute('data-sp-pick')`).catch(() => {});
 	}
 	const ok = out.filter((x) => !x.error).length;
-	const done = !ok ? 'Could not read those. Try again.' : batch.action === 'add' ? `✓ Your agent is adding ${ok === 1 ? 'it' : `all ${ok}`} to your project` : `✓ ${ok} prompt${ok > 1 ? 's' : ''} ready in your agent`;
+	const done = !ok ? 'Could not read those. Try again.' : batch.action === 'learn' ? `✓ Taken apart, in your agent` : batch.action === 'add' ? `✓ Your agent is adding ${ok === 1 ? 'it' : `all ${ok}`} to your project` : `✓ ${ok} prompt${ok > 1 ? 's' : ''} ready in your agent`;
 	await s.page.eval(`window.__spStatus?.(${JSON.stringify(done)})`).catch(() => {});
 	return out;
 }

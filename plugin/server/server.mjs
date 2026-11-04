@@ -15,6 +15,7 @@ import { buildStack } from './stack.mjs';
 import * as pick from './pick.mjs';
 import { devUrl, project } from './project.mjs';
 import { fileTokens, findSource } from './place.mjs';
+import { breakdown } from './breakdown.mjs';
 import { match } from './match.mjs';
 
 const VERSION = '0.1.0';
@@ -147,6 +148,24 @@ Show the person, in this order:
 			const good = results.filter((x) => !x.error);
 			const failed = results.filter((x) => x.error).map((x) => `\nCould not read ${x.n} (${x.label}): ${x.error}`).join('');
 			const proj = project();
+			if (batch.action === 'learn' && good.length) {
+				// break it down: a lesson per pick, with the exploded view
+				const out = [text(`${opened}BREAK IT DOWN: the person wants to learn how ${good.length > 1 ? 'these are' : 'this is'} made (or rebuild ${good.length > 1 ? 'them' : 'it'} their own way), not a copy prompt.${failed}
+
+Teach it. For each pick: show the exploded view, then walk through the layers bottom to top in plain words (what each one is, the one technique that makes it work, why it is done that way), using the facts in its LESSON.md below. Mention anything hidden at rest and what likely brings it in. Keep CSS to the few lines that matter; LESSON.md has the rest and the step pictures. End with one line offering to build it with them step by step, in their stack, checking each step against steps/step-N.png. Then call site_pick again (no url) to wait for more picks.`)];
+				for (const x of good) {
+					try {
+						const files = Array.isArray(x.asset) ? x.asset.map((f) => ({ src: f.src, file: f.file })) : x.asset ? [{ src: x.asset.src, file: x.asset.file }] : [];
+						const b = await breakdown({ dir: x.dir, file: x.r.file, css: x.r.code.css, states: x.r.states, files, url: batch.url, label: `${x.label.split(' · ')[0]}, ${new URL(batch.url).host.replace(/^www\./, '')}`, note: x.note });
+						const lesson = path.join(x.dir, 'LESSON.md');
+						out.push(text(`── ${x.n}. ${x.label}${x.note ? ` · "${x.note}"` : ''}\nLesson: ${rel(lesson)}  (link: ${link(lesson)}) · exploded view: ${link(path.join(x.dir, 'exploded.png'))} · ${b.layers} layers\n\n${b.md}`));
+						out.push(image(b.exploded, 'image/png'));
+					} catch (e) {
+						out.push(text(`── ${x.n}. ${x.label}: could not take it apart (${e.message ?? e}). Its exact copy is still in ${rel(x.dir)}.`));
+					}
+				}
+				return out;
+			}
 			if (batch.action === 'add' && good.length) {
 				// building: the person shows where each pick goes in their running site, the agent builds it in
 				const dev = a.dev_url ? urlOf(a.dev_url) : await devUrl(proj);

@@ -18,7 +18,7 @@ export function overlay() {
 			<div class="head k"></div><div class="rule"></div>
 			<textarea placeholder="What do you like about it? (optional)" rows="2"></textarea>
 			<div class="rule"></div>
-			<div class="foot"><button class="btn ghost" data-a="remove">${window.__spIcons?.trash ?? ''}Remove</button><span class="go"><button class="btn ghost-n" data-a="add" hidden>Add</button><button class="btn done primary" data-a="send">Get prompt <kbd>↵</kbd></button></span></div></div>
+			<div class="foot"><button class="btn ghost icon" data-a="remove" title="Remove this pick">${window.__spIcons?.trash ?? ''}</button><span class="go"><button class="btn ghost-n" data-a="add" hidden>Add</button><button class="btn ghost-n" data-a="learn" title="Take it apart: the layers, how each is made, and the build in steps">Break it down</button><button class="btn done primary" data-a="send">Get prompt <kbd>↵</kbd></button></span></div></div>
 		<div class="bar surface">
 			<div class="mark">${window.__spIcons?.cursor ?? ''}</div>
 			<button class="btn on" data-a="pick" title="Pick (Esc)">${window.__spIcons?.pick ?? ''}Pick<span class="count">0</span></button>
@@ -172,11 +172,11 @@ export function overlay() {
 			const batch = picks.filter((p) => document.contains(p.el)).map((p) => ({ n: p.n, kind: p.kind, label: p.label, note: p.note }));
 			picks.length = 0;
 			redraw();
-			status.textContent = a === 'add' ? `Sent ${batch.length}. Adding to ${proj?.name ?? 'your project'}…` : `Sent ${batch.length}. Writing the prompt${batch.length > 1 ? 's' : ''}…`;
+			status.textContent = a === 'add' ? `Sent ${batch.length}. Adding to ${proj?.name ?? 'your project'}…` : a === 'learn' ? `Taking ${batch.length > 1 ? 'them' : 'it'} apart…` : `Sent ${batch.length}. Writing the prompt${batch.length > 1 ? 's' : ''}…`;
 			status.hidden = false;
 			status.classList.remove('ok');
 			bar.classList.add('busy');
-			window.__spSend?.(JSON.stringify({ url: location.href, title: document.title, picks: batch, action: a === 'add' ? 'add' : 'prompt', style }));
+			window.__spSend?.(JSON.stringify({ url: location.href, title: document.title, picks: batch, action: a === 'add' ? 'add' : a === 'learn' ? 'learn' : 'prompt', style }));
 		};
 		root.addEventListener('click', (e) => {
 			const badge = e.target.closest('.badge');
@@ -187,7 +187,7 @@ export function overlay() {
 			if (a === 'pick') setPicking(!picking);
 			if (a === 'remove' && open) unpick(open);
 				if (a === 'clear') { for (const p of [...picks]) unpick(p); status.hidden = true; }
-			if (a === 'send' || a === 'add') send(a);
+			if (a === 'send' || a === 'add' || a === 'learn') send(a);
 		});
 		window.__spStatus = (t) => { const ok = /^✓/.test(t || ''); status.textContent = ok ? t.replace(/^✓\s*/, '') : t; status.hidden = !t; status.classList.toggle('ok', ok); bar.classList.toggle('busy', !!t && !ok && !/^Could not/.test(t)); };
 		// out of every screenshot of a pick (the highlight would tint it)

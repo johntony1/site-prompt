@@ -53,6 +53,13 @@ in your running dev server against the original with `site_match` and fixes what
 - **Phones too.** Every pick is also read at 390 px wide, so the prompt says what the original changes there.
 - **Answers in the toolbar.** When it is built, your agent says so in the toolbar ("✓ Added to Hero.tsx, 99% match").
 
+## Break it down
+
+Want to learn how something is made, or make your own version? Pick it and press **Break it down** in the note
+card. You get a lesson instead of a copy: an exploded view of its layers, what each layer is and the technique
+behind it (stacked shadows, gradient masks, `::before` layers, tilts, what is hidden until hover), and the build in
+steps, each with a picture of how far yours should look.
+
 ## Tools
 
 - `site_read`: read and measure a page, write the folder above.

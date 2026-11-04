@@ -73,7 +73,7 @@ kbd{font:500 10.5px/1 ui-sans-serif,-apple-system,system-ui,sans-serif;color:var
 .btn.quiet:hover{color:var(--text)}
 
 /* the note card: header, hairline, a plain writing area, footer */
-.pop{width:288px;border-radius:12px;display:none;--r:12px;--beam:60px;animation:sp-in 160ms cubic-bezier(.2,0,0,1)}
+.pop{width:312px;border-radius:12px;display:none;--r:12px;--beam:60px;animation:sp-in 160ms cubic-bezier(.2,0,0,1)}
 @keyframes sp-in{from{opacity:0;transform:translateY(4px) scale(.985)}}
 .head{display:flex;align-items:center;gap:7px;height:36px;padding:0 8px 0 10px}
 .head .num{width:18px;height:18px;font-size:10.5px!important;border-radius:6px;background:var(--accent2);color:#fff;font-size:11px;font-weight:650;display:grid;place-items:center;font-variant-numeric:tabular-nums;box-shadow:inset 0 1px 0 rgba(255,255,255,.2)}
@@ -91,6 +91,7 @@ kbd{font:500 10.5px/1 ui-sans-serif,-apple-system,system-ui,sans-serif;color:var
 .btn.done:not(.primary){color:var(--text);background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px var(--line)}
 .btn.done:not(.primary):hover{background:rgba(255,255,255,.09)}
 .go{display:flex;gap:4px}
+.btn.ghost.icon{width:26px;padding:0;justify-content:center}
 .btn.ghost-n{height:26px;padding:0 9px;font-size:12px;color:var(--text2);box-shadow:inset 0 0 0 1px var(--line)}
 .btn.done kbd{background:rgba(255,255,255,.06)}
 

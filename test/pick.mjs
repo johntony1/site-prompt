@@ -173,6 +173,16 @@ try {
 	await click(await ui('.pop [data-a=send]'));
 	const quick = await quickCall;
 	check(/1 prompt from/.test(quick.words) && /just the type/.test(quick.words), 'Get prompt in the note card sends it straight away', quick.words.split('\n')[0]);
+	// 3c. Break it down: a lesson with the exploded view instead of a copy prompt
+	const learnCall = call('site_pick', { wait: 120 });
+	await sleep(200);
+	await click(await center('.cta'));
+	await click(await ui('.pop [data-a=learn]'));
+	const learn = await learnCall;
+	writeFileSync(path.join(out, 'learn.txt'), learn.words);
+	check(/BREAK IT DOWN/.test(learn.words) && /# How it is made/.test(learn.words) && /## Build it in steps/.test(learn.words), 'Break it down: a lesson comes back, not a copy prompt', learn.words.split('\n')[0]);
+	check(/2 shadows stacked|one shadow/.test(learn.words) && /inset shadow draws a thin highlight/.test(learn.words), 'it says how the depth is made (shadows, the inner highlight)', learn.words.match(/.*shadow.*/g)?.slice(0, 2));
+	check(learn.images >= 1 && existsSync(path.join(learn.words.match(/Lesson: (\S+)/)[1].replace(/^~/, os.homedir()), '..', 'exploded.png')), 'with the exploded view, saved beside LESSON.md');
 	// 4. building: the toolbar offers Add to my-launch; the agent is told to build it into the project
 	check(await ev(`(() => { const r = window.__spTest.rect('.bar [data-a=add]'); return r.x > 0; })()`), 'the toolbar offers Add to the project');
 	check(await ev(`(() => { const r = window.__spTest.rect('.seg'); return r.x > 0; })()`), 'the toolbar offers Exact | My style');

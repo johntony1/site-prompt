@@ -41,6 +41,15 @@ or says "pick", "hover", "point at":
    markdown block with its saved link. Then call `site_pick` (no url) again to wait for more, until they say they
    are done; then `stop: true`.
 
+## Break it down (to learn, or remake it their own way)
+
+The note card on a pick offers **Break it down** beside Get prompt. When they press it (or ask how something is
+made, want to learn it, or want their own version), `site_pick` returns BREAK IT DOWN with a LESSON.md per pick: the
+layers bottom to top, what each paints and the technique that makes it (stacked shadows, gradient masks, ::before
+layers, tilts, things hidden until hover or scroll), an exploded view (exploded.png), each layer alone (layers/) and
+the build in steps with a picture per step (steps/). Teach it in plain words with the exploded view; keep CSS to the
+lines that matter; offer to build it with them step by step in their stack. Never paste the whole lesson.
+
 ## While they build: add it to their project
 
 When the person is working in a project (the folder you run in has a package.json or an index.html) and wants
