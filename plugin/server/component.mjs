@@ -107,6 +107,11 @@ function snapshot(sel) {
 			out.push(`${p}:${v}`);
 		}
 		if (cs.transform !== 'none' || cs.perspective !== 'none' || cs.rotate !== 'none' || cs.scale !== 'none') out.push(`transform-origin:${cs.transformOrigin}`);
+		// a border style without its width falls back to "medium" (3px): a solid 0px border must say 0px
+		for (const side of ['top', 'right', 'bottom', 'left']) {
+			if (out.some((x) => x.startsWith(`border-${side}-style:`)) && !out.some((x) => x.startsWith(`border-${side}-width:`))) out.push(`border-${side}-width:${cs.getPropertyValue(`border-${side}-width`)}`);
+		}
+		if (out.some((x) => x.startsWith('outline-style:')) && !out.some((x) => x.startsWith('outline-width:'))) out.push(`outline-width:${cs.outlineWidth}`);
 		return out;
 	};
 	nodes.forEach((n, i) => {
@@ -114,6 +119,7 @@ function snapshot(sel) {
 		const base = {};
 		for (let k = 0; k < cs.length; k++) base[cs[k]] = cs.getPropertyValue(cs[k]);
 		window.__spBase[i] = base;
+		for (const ps of ['::before', '::after']) { const pc = getComputedStyle(n, ps); if (pc.content && pc.content !== 'none' && pc.content !== 'normal') { const b = {}; for (let k = 0; k < pc.length; k++) b[pc[k]] = pc.getPropertyValue(pc[k]); window.__spBase[i + ps] = b; } }
 		n.setAttribute('data-sp-n', String(i));
 		let d = decls(cs, defOf(n), parent, n === root);
 		if (n === root) d = d.filter((x) => !/^(margin|position|top|left|right|bottom|z-index|grid-area|grid-row|grid-column|order|flex-grow|flex-shrink|flex-basis|align-self|justify-self)(-|:)/.test(x)).concat(cs.position === 'fixed' || cs.position === 'absolute' || cs.position === 'sticky' ? ['position:relative'] : cs.position === 'relative' ? ['position:relative'] : []);
@@ -159,6 +165,10 @@ function snapshot(sel) {
 		box: { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height },
 		tag: root.tagName.toLowerCase(), text: (root.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 200),
 		nodes: nodes.length,
+		fits: r.top >= 0 && r.left >= 0 && r.bottom <= innerHeight && r.right <= innerWidth,
+		pinned: (() => { for (let x = root; x && x !== document.documentElement; x = x.parentElement) if (/fixed|sticky/.test(getComputedStyle(x).position)) return true; return false; })(),
+		styles: [...new Set(nodes.map((n) => getComputedStyle(n).fontStyle))],
+		latin: !/[^\u0000-\u024f\u2000-\u206f\u20ac\u2122]/.test(root.innerText || ''),
 	};
 }
 
@@ -172,6 +182,13 @@ function stateDiff(i) {
 		const j = +n.getAttribute('data-sp-n'), base = window.__spBase[j], cs = getComputedStyle(n), d = [];
 		for (let k = 0; k < cs.length; k++) { const p = cs[k]; if (IGNORE.test(p)) continue; const v = cs.getPropertyValue(p); if (base[p] !== v) d.push(`${p}:${v}`); }
 		if (d.length) out[j] = d;
+		for (const ps of ['::before', '::after']) {
+			const pb = window.__spBase[j + ps];
+			if (!pb) continue;
+			const pc = getComputedStyle(n, ps), pd = [];
+			for (let k = 0; k < pc.length; k++) { const p = pc[k]; if (IGNORE.test(p)) continue; const v = pc.getPropertyValue(p); if (pb[p] !== v) pd.push(`${p}:${v}`); }
+			if (pd.length) out[j + ps] = pd;
+		}
 	}
 	return out;
 }
@@ -238,7 +255,7 @@ export async function clone(url, outDir, { selector, wait: waitS = 180, log = ()
 export async function extract(page, sel, outDir, url, { log = () => {}, own = false } = {}) {
 	mkdirSync(outDir, { recursive: true });
 	{
-		await page.eval(`document.querySelector(${JSON.stringify(sel)})?.scrollIntoView({ block: 'center', inline: 'nearest' })`).catch(() => {});
+		await page.eval(`document.querySelector(${JSON.stringify(sel)})?.scrollIntoView({ block: 'nearest', inline: 'nearest' })`).catch(() => {});
 		await wait(250);
 		log('snapshotting');
 		const snap = await page.run(snapshot, sel, 120_000);
@@ -249,8 +266,9 @@ export async function extract(page, sel, outDir, url, { log = () => {}, own = fa
 		const padded = { x: Math.max(0, clip.x - pad), y: Math.max(0, clip.y - pad), width: clip.width + pad * 2, height: clip.height + pad * 2 };
 		await page.eval(`(() => { const s = document.createElement('style'); s.id = 'sp-freeze'; s.textContent = '*,*::before,*::after{transition:none!important;animation-play-state:paused!important}'; document.head.appendChild(s); })()`);
 		await wait(80);
-		const restPng = await shot(page, { beyond: !own, ...clip, format: 'png' });
-		writeFileSync(path.join(outDir, 'original.png'), await shot(page, { beyond: !own, ...padded, format: 'png' }));
+		const beyond = !own && !snap.pinned && !snap.fits;
+		const restPng = await shot(page, { beyond, ...clip, format: 'png' });
+		writeFileSync(path.join(outDir, 'original.png'), await shot(page, { beyond, ...padded, format: 'png' }));
 		writeFileSync(path.join(outDir, 'original-tight.png'), restPng); // the element alone: what site_match compares a rebuild with
 		writeFileSync(path.join(outDir, 'pick.json'), JSON.stringify({ url, box: snap.box, tag: snap.tag, text: snap.text }));
 		const { root } = await page.send('DOM.getDocument', { depth: 0 });
@@ -270,8 +288,8 @@ export async function extract(page, sel, outDir, url, { log = () => {}, own = fa
 				}
 				if (Object.keys(diff).length) {
 					(states[i] ??= {})[name] = diff;
-					for (const [j, d] of Object.entries(diff)) stateRules.push(`.c${i}:${name}${+j === i ? '' : ` .c${j}`}{${d.map((x) => x + ' !important').join(';')}}`);
-					if (name === 'hover' && i === snap.interactive[0]) writeFileSync(path.join(outDir, 'original-hover.png'), await shot(page, { beyond: !own, ...padded, format: 'png' }));
+					for (const [j, d] of Object.entries(diff)) { const [jn, ps] = j.split('::'); stateRules.push(`.c${i}:${name}${+jn === i ? '' : ` .c${jn}`}${ps ? '::' + ps : ''}{${d.map((x) => x + ' !important').join(';')}}`); }
+					if (name === 'hover' && i === snap.interactive[0]) writeFileSync(path.join(outDir, 'original-hover.png'), await shot(page, { beyond, ...padded, format: 'png' }));
 				}
 				await page.send('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: [] });
 			}
@@ -280,7 +298,10 @@ export async function extract(page, sel, outDir, url, { log = () => {}, own = fa
 		// fonts and keyframes it uses, verbatim
 		const css = mine([...snap.sheets, ...(await fetchExternal(snap.external, url))]);
 		// the font files go inside component.html: a font server rarely lets another origin (or a file) load them
-		const remoteFaces = css.fontFaces.filter((f) => snap.families.some((fam) => f.includes(fam)));
+		const LATIN = /U\+0-|U\+100-|U\+0000-/i;
+		const remoteFaces = [...new Set(css.fontFaces)].filter((f) => snap.families.some((fam) => f.includes(fam)))
+			.filter((f) => { const st = f.match(/font-style:\s*(\w+)/)?.[1] ?? 'normal'; return snap.styles.includes(st === 'oblique' ? 'italic' : st); })
+			.filter((f) => !snap.latin || !/unicode-range/.test(f) || LATIN.test(f));
 		const faces = await embedFonts(remoteFaces, url);
 		const frames = snap.anims.map((a) => css.keyframes[a]).filter(Boolean);
 		const bg = snap.bg;
@@ -326,7 +347,7 @@ ${snap.html}
 			for (const t of tries) { const sc = await alignedScore(chk.page, restPng, t, P); if (!score || sc.diff < score.diff) score = sc; }
 			const ssim = score.ssim;
 			const sizeOk = Math.abs(b.width - clip.width) <= 2 && Math.abs(b.height - clip.height) <= 2;
-			const code = { html: snap.html, css: [...remoteFaces, ...frames, ...snap.rules, ...stateRules].join('\n'), fonts: css.families.filter((f) => snap.families.includes(f.family)) };
+			const code = { html: snap.html, css: [...remoteFaces, ...frames, ...snap.rules, ...stateRules].join('\n'), fonts: css.families.filter((f) => snap.families.includes(f.family)).map((f) => ({ ...f, sources: [...new Set(remoteFaces.filter((x) => x.includes(f.family)).sort((a, b) => /U\+0-/i.test(b) - /U\+0-/i.test(a)).flatMap((x) => [...x.matchAll(/url\("?([^")]+)"?\)/g)].map((m) => m[1])))].concat(f.sources).filter((u, k, a) => a.indexOf(u) === k) })) };
 			return { file, outDir, snap, states, stateRules, code, faces: faces.length, keyframes: frames.length, ssim, diff: score.diff, size: { original: [clip.width, clip.height], clone: [Math.round(b.width), Math.round(b.height)], ok: sizeOk }, sheet: Buffer.from(score.sheet.split(',')[1], 'base64'), offset: score.offset };
 		} finally {
 			chk.close();

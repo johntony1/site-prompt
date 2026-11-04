@@ -88,7 +88,7 @@ export async function processBatch(batch, baseDir, { log = () => {} } = {}) {
 			await s.page.eval('window.__spHide?.(true)').catch(() => {});
 			const r = await extract(s.page, sel, dir, batch.url, { own: s.own, log }).finally(() => s.page.eval('window.__spHide?.(false)').catch(() => {}));
 			await s.page.eval(`window.__spStatus?.(${JSON.stringify(`Checking ${p.n} at phone width…`)})`).catch(() => {});
-				r.mobile = await atPhoneWidth(s, sel, dir).catch(() => null);
+				r.mobile = await atPhoneWidth(s, sel, dir, batch.url).catch(() => null);
 				let asset = null;
 			if (d.art?.src && /^https?:/.test(d.art.src) && d.art.kind !== 'video') asset = await download(d.art.src, dir, batch.url);
 			const md = pickPrompt({ pick: p, d, r, url: batch.url, asset, dir });
@@ -148,7 +148,7 @@ export function pickPrompt({ pick, d, r, url, asset, dir }) {
 	if (r.stateRules.length) {
 		L.push('## States (forced in Chrome, already in the CSS above)');
 		for (const [i, st] of Object.entries(r.states)) for (const [state, diff] of Object.entries(st)) {
-			L.push(`- ${state} on .c${i}: ${Object.entries(diff).map(([j, decls]) => `${+j === +i ? '' : `.c${j} `}${decls.slice(0, 5).map(px).join('; ')}`).join(' | ')}`);
+			L.push(`- ${state} on .c${i}: ${Object.entries(diff).map(([j, decls]) => { const [jn, ps] = j.split('::'); return `${+jn === +i ? (ps ? `its ::${ps} ` : '') : `.c${jn}${ps ? '::' + ps : ''} `}${decls.slice(0, 5).map(px).join('; ')}`; }).join(' | ')}`);
 		}
 		L.push('');
 	}
@@ -208,34 +208,55 @@ function layoutOf({ sel, props }) {
 }
 const kebab = (p) => p.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase());
 
-/** The same pick at 390 px wide: a screenshot and what its layout does there (it has to work on phones in their site too). */
-async function atPhoneWidth(s, sel, dir) {
+/** In the page: a path to the element that also finds it in a fresh copy of the page. */
+function pathTo(sel) {
+	const el = document.querySelector(sel);
+	if (!el) return null;
+	const parts = [];
+	for (let x = el; x && x !== document.documentElement; x = x.parentElement) {
+		if (x.id && !/\d{3,}|:/.test(x.id)) { parts.unshift(`#${CSS.escape(x.id)}`); break; }
+		const same = x.parentElement ? [...x.parentElement.children].filter((c) => c.tagName === x.tagName) : [];
+		parts.unshift(x.tagName.toLowerCase() + (same.length > 1 ? `:nth-of-type(${same.indexOf(x) + 1})` : ''));
+	}
+	return parts.join(' > ');
+}
+
+/**
+ * The same pick at 390 px wide: a screenshot and what its layout does there (it has to work on phones in their site
+ * too). Done in a background tab of the same browser (same sign-ins), so the page the person is looking at never moves.
+ */
+async function atPhoneWidth(s, sel, dir, url) {
 	const wide = await s.page.run(layoutOf, { sel, props: LAYOUT });
-	if (!wide) return null;
-	await viewport(s.page, 390, 844, false);
+	const where = await s.page.run(pathTo, sel);
+	if (!wide || !where) return null;
+	const tab = await openTab(s, url, { background: true, width: 390, height: 844 });
 	try {
-		await wait(450);
-		const box = await s.page.eval(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height }; })()`);
-		await wait(200);
-		const narrow = await s.page.run(layoutOf, { sel, props: LAYOUT });
+		const p = tab.page;
+		await p.eval('document.fonts ? Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 2500))]).then(() => true) : true').catch(() => {});
+		await wait(600);
+		const mark = `(() => { const e = document.querySelector(${JSON.stringify(where)}); if (!e) return false; e.setAttribute('data-sp-phone', '1'); return true; })()`;
+		if (!(await p.eval(mark).catch(() => false))) return null;
+		const psel = '[data-sp-phone]';
+		const box = await p.eval(`(() => { const e = document.querySelector('${psel}'); e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height }; })()`);
+		await wait(250);
+		const narrow = await p.run(layoutOf, { sel: psel, props: LAYOUT });
 		if (!box || !narrow) return null;
 		const hidden = narrow[0].hidden;
 		if (!hidden && box.width >= 1 && box.height >= 1) {
 			const pad = 12;
-			writeFileSync(path.join(dir, 'original-mobile.png'), await shot(s.page, { beyond: !s.own, x: Math.max(0, Math.floor(box.x) - pad), y: Math.max(0, Math.floor(box.y) - pad), width: Math.min(390, Math.ceil(box.width) + pad * 2), height: Math.ceil(box.height) + pad * 2, format: 'png' }));
+			writeFileSync(path.join(dir, 'original-mobile.png'), await shot(p, { beyond: true, x: Math.max(0, Math.floor(box.x) - pad), y: Math.max(0, Math.floor(box.y) - pad), width: Math.min(390, Math.ceil(box.width) + pad * 2), height: Math.ceil(box.height) + pad * 2, format: 'png' }));
 		}
 		const changes = [];
 		for (let i = 0; i < Math.min(wide.length, narrow.length) && changes.length < 40; i++) {
 			const a = wide[i], b = narrow[i];
 			if (a.hidden !== b.hidden) { changes.push(`.c${i}: ${b.hidden ? 'hidden on phones' : 'only shown on phones'}`); continue; }
 			if (b.hidden) continue;
-			const d = LAYOUT.filter((p) => a[p] !== b[p]).map((p) => `${kebab(p)} ${a[p]} → ${b[p]}`);
+			const d = LAYOUT.filter((k) => a[k] !== b[k]).map((k) => `${kebab(k)} ${a[k]} → ${b[k]}`);
 			if (d.length) changes.push(`.c${i}: ${d.join('; ')}`);
 		}
 		return { hidden, size: [Math.round(box.width), Math.round(box.height)], changes, shot: hidden ? null : 'original-mobile.png' };
 	} finally {
-		if (s.headless) await viewport(s.page, 1440, 900); else await s.page.send('Emulation.clearDeviceMetricsOverride').catch(() => {});
-		await wait(150);
+		await tab.close();
 	}
 }
 

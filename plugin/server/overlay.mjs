@@ -18,7 +18,7 @@ export function overlay() {
 			<div class="head k"></div><div class="rule"></div>
 			<textarea placeholder="What do you like about it? (optional)" rows="2"></textarea>
 			<div class="rule"></div>
-			<div class="foot"><button class="btn ghost" data-a="remove">${window.__spIcons?.trash ?? ''}Remove</button><span class="go"><button class="btn ghost-n" data-a="add" hidden>Add</button><button class="btn done" data-a="send">Get prompt <kbd>↵</kbd></button></span></div></div>
+			<div class="foot"><button class="btn ghost" data-a="remove">${window.__spIcons?.trash ?? ''}Remove</button><span class="go"><button class="btn ghost-n" data-a="add" hidden>Add</button><button class="btn done primary" data-a="send">Get prompt <kbd>↵</kbd></button></span></div></div>
 		<div class="bar surface">
 			<div class="mark">${window.__spIcons?.cursor ?? ''}</div>
 			<button class="btn on" data-a="pick" title="Pick (Esc)">${window.__spIcons?.pick ?? ''}Pick<span class="count">0</span></button>
@@ -213,7 +213,7 @@ export function details(sel) {
 			wordSpacing: tcs.wordSpacing, transform: tcs.textTransform, align: tcs.textAlign, color: tcs.color, features: tcs.fontFeatureSettings, variation: tcs.fontVariationSettings,
 			optical: tcs.fontOpticalSizing, smoothing: tcs.webkitFontSmoothing, shadow: tcs.textShadow, decoration: tcs.textDecoration, wrap: tcs.textWrap || tcs.textWrapStyle,
 			fill: tcs.webkitTextFillColor, clip: tcs.webkitBackgroundClip || tcs.backgroundClip, background: tcs.backgroundImage !== 'none' ? tcs.backgroundImage : null,
-			lines: Math.max(1, Math.round(textEl.getBoundingClientRect().height / (parseFloat(tcs.lineHeight) || parseFloat(tcs.fontSize) * 1.2))),
+			lines: (() => { const tops = new Set(); for (const t of [...textEl.childNodes].filter((n) => n.nodeType === 3 && n.textContent.trim())) { const rg = document.createRange(); rg.selectNodeContents(t); for (const q of rg.getClientRects()) if (q.width > 0) tops.add(Math.round(q.top)); } return Math.max(1, tops.size); })(),
 		},
 		art: null,
 	};

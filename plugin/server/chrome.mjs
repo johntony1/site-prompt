@@ -283,17 +283,19 @@ export async function connectOwn(url, { log = () => {} } = {}) {
 }
 
 /** A second tab in the same browser (their dev site beside the site they pick from), attached and ready. */
-export async function openTab(conn, url) {
+export async function openTab(conn, url, { background = false, width = null, height = null } = {}) {
 	let router = conn.router, mine = false;
 	if (!router?.send || !conn.own) {
 		router = new Router(await socket(conn.endpoint));
 		mine = true;
 	}
-	const { targetId } = await router.send('Target.createTarget', { url });
+	// a background tab opens blank and sized first, so it lays out at that width from the start
+	const { targetId } = await router.send('Target.createTarget', { url: width ? 'about:blank' : url, background });
 	const { sessionId } = await router.send('Target.attachToTarget', { targetId, flatten: true });
-	await router.send('Target.activateTarget', { targetId }).catch(() => {});
+	if (!background) await router.send('Target.activateTarget', { targetId }).catch(() => {});
 	const page = new Page(router, sessionId);
 	for (const d of ['Page', 'Runtime', 'DOM', 'CSS']) await page.send(`${d}.enable`);
+	if (width) { await page.send('Emulation.setDeviceMetricsOverride', { width, height: height ?? 844, deviceScaleFactor: 1, mobile: false }); await page.send('Page.navigate', { url }); await new Promise((r) => setTimeout(r, 300)); }
 	for (let t0 = Date.now(); Date.now() - t0 < 30_000; await new Promise((r) => setTimeout(r, 100))) {
 		const state = await page.eval('location.href !== "about:blank" && document.readyState').catch(() => false);
 		if (state === 'complete') break;
