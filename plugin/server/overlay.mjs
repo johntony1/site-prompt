@@ -4,7 +4,7 @@
 // Self-contained: Page.addScriptToEvaluateOnNewDocument installs it on every page the person visits in the session.
 
 export function overlay() {
-	if (window.__spOverlay) return;
+	if (window.__spOverlay || window.top !== window) return; // the page itself, never its iframes
 	window.__spOverlay = true;
 	const start = () => {
 		if (!document.documentElement) return setTimeout(start, 30);
@@ -19,14 +19,13 @@ export function overlay() {
 			<textarea placeholder="What do you like about it? (optional)"></textarea>
 			<div class="rule"></div>
 			<div class="foot"><button class="btn ghost" data-a="remove">${window.__spIcons?.trash ?? ''}Remove</button><button class="btn done" data-a="done">Done <kbd>↵</kbd></button></div></div>
-		<div class="bar surface"><span class="beam"></span>
+		<div class="bar surface">
 			<div class="mark">${window.__spIcons?.cursor ?? ''}</div>
-			<button class="btn on" data-a="pick" title="Pick (Esc)">${window.__spIcons?.pick ?? ''}Pick</button>
-			<span class="count">0</span>
+			<button class="btn on" data-a="pick" title="Pick (Esc)">${window.__spIcons?.pick ?? ''}Pick<span class="count">0</span></button>
 			<span class="sep"></span>
-			<button class="btn" data-a="send" disabled>${window.__spIcons?.prompt ?? ''}Get prompts</button>
 			<div class="seg" hidden><button data-s="exact" title="Pixel for pixel, as it is on this site">Exact</button><button data-s="mine" title="Same layout and motion, in your site's fonts, colours and radius">My style</button></div>
-			<button class="btn primary" data-a="add" disabled hidden>${window.__spIcons?.add ?? ''}Add to project</button>
+			<button class="btn" data-a="add" disabled hidden>${window.__spIcons?.add ?? ''}Add to project</button>
+			<button class="btn primary" data-a="send" disabled>${window.__spIcons?.prompt ?? ''}Get prompts</button>
 			<span class="status" hidden></span>
 		</div>`;
 		document.documentElement.appendChild(host);
@@ -41,7 +40,7 @@ export function overlay() {
 			addBtn.innerHTML = `${window.__spIcons?.add ?? ''}Add to ${(proj.name.length > 18 ? 'project' : proj.name).replace(/</g, '&lt;')}`;
 			note.placeholder = 'What do you like about it, or where should it go? (optional)';
 			hint.innerHTML = '<b>Hover</b> anything you like, <b>click</b> to pick it, then <b>Add</b> it to your project';
-		} else sendBtn.classList.add('primary');
+		}
 		const store = { get: (k) => { try { return sessionStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch {} } };
 		let style = store.get('__spStyle') || 'exact';
 			const setStyle = (v) => { style = v; store.set('__spStyle', v); for (const b of root.querySelectorAll('.seg button')) b.classList.toggle('on', b.dataset.s === v); };

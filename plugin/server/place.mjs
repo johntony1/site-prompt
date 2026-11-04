@@ -7,6 +7,7 @@ import path from 'node:path';
 
 /** In the page: the placing toolbar. window.__spPlace = { picks: [{ n, label }], project }. */
 export function placer() {
+	if (window.top !== window) return; // the page itself, never its iframes
 	if (window.__spPlacer) return window.__spPlacer.restart?.();
 	const start = () => {
 		if (!document.documentElement) return setTimeout(start, 30);
@@ -16,7 +17,7 @@ export function placer() {
 		const root = host.attachShadow({ mode: 'closed' });
 		root.innerHTML = `<style>${window.__spTheme || ''}</style>
 		<div class="hl place"></div><div class="line"></div><div class="chip"></div><div class="pins"></div>
-		<div class="bar surface busy"><span class="beam"></span><div class="mark">${window.__spIcons?.cursor ?? ''}</div><span class="q"></span><span class="sep"></span><button class="btn" data-a="skip">Skip</button></div>`;
+		<div class="bar surface"><div class="mark">${window.__spIcons?.cursor ?? ''}</div><span class="q"></span><span class="sep"></span><button class="btn" data-a="skip">Skip</button></div>`;
 		document.documentElement.appendChild(host);
 		const $ = (s) => root.querySelector(s);
 		const hl = $('.hl'), line = $('.line'), chip = $('.chip'), pins = $('.pins'), q = $('.q'), bar = $('.bar');
@@ -107,7 +108,7 @@ export function placer() {
 			host.remove();
 		};
 		window.__spPlacer = { restart: () => { teardown(); window.__spPlacer = null; placer(); }, remove: () => { teardown(); window.__spPlacer = null; } };
-		window.__spStatus = (t) => { const ok = /^✓/.test(t || ''); q.innerHTML = `<b>${String(t).replace(/^✓\s*/, '').replace(/</g, '&lt;')}</b>`; bar.style.display = t ? '' : 'none'; bar.classList.toggle('busy', !ok); };
+		window.__spStatus = (t) => { const ok = /^✓/.test(t || ''); q.innerHTML = `<b>${String(t).replace(/^✓\s*/, '').replace(/</g, '&lt;')}</b>`; bar.style.display = t ? '' : 'none';  };
 		window.__spHide = (v) => { host.style.display = v ? 'none' : ''; };
 		window.__spTest = { place: (sel, how = 'after') => { const el = document.querySelector(sel); placed.push({ n: cfg.picks[i].n, el, where: how, info: window.__spWhere(el) }); i++; if (i >= cfg.picks.length) finish(); else ask(); }, status: () => q.textContent };
 	};
