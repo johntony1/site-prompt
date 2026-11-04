@@ -15,6 +15,7 @@ import { details, overlay } from './overlay.mjs';
 import { project } from './project.mjs';
 import { placer, tokens } from './place.mjs';
 import { ICONS, THEME } from './theme.mjs';
+import { motionMarkdown, recordMotion } from './motion.mjs';
 const LOOK = `window.__spTheme = ${JSON.stringify(THEME)}; window.__spIcons = ${JSON.stringify(ICONS)};`;
 
 let session = null; // { page, close, own, url, queue, waiter }
@@ -84,6 +85,10 @@ export async function processBatch(batch, baseDir, { log = () => {} } = {}) {
 		const dir = path.join(baseDir, host, 'picks', name);
 		mkdirSync(dir, { recursive: true });
 		await s.page.eval(`window.__spStatus?.(${JSON.stringify(`Reading ${p.n}. ${p.label}…`)})`).catch(() => {});
+		// how it moves: recorded in a Chrome of its own while the copy is made here
+		const elPath = await s.page.run(pathTo, sel).catch(() => null);
+		const safeClick = await s.page.eval(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return false; if (e.closest('a[href]') || e.closest('form')) return false; return e.matches('button[type=button], summary, [aria-expanded], [role=tab], [role=switch], [role=button]') || !!e.querySelector(':scope > summary'); })()`).catch(() => false);
+		const motionRun = elPath ? recordMotion({ url: batch.url, elPath, dir, safeClick, log }).catch(() => null) : Promise.resolve(null);
 		try {
 			await s.page.eval(`window.__spHide?.(true, ${JSON.stringify(sel)})`).catch(() => {});
 			const r = await extract(s.page, sel, dir, batch.url, { own: s.own, log }).finally(() => s.page.eval('window.__spHide?.(false)').catch(() => {}));
@@ -96,6 +101,8 @@ export async function processBatch(batch, baseDir, { log = () => {} } = {}) {
 				for (const [k, l] of files.entries()) { const got = await download(l.src, dir, batch.url, `layer-${k + 1}`); if (got) asset.push({ ...got, layer: l }); }
 				if (!asset.length) asset = null;
 			} else if (d.art?.src && /^https?:/.test(d.art.src) && d.art.kind !== 'video') asset = await download(d.art.src, dir, batch.url);
+			await s.page.eval(`window.__spStatus?.(${JSON.stringify(`Recording how ${p.n} moves…`)})`).catch(() => {});
+			r.motion = await motionRun;
 			const md = pickPrompt({ pick: p, d, r, url: batch.url, asset, dir });
 			writeFileSync(path.join(dir, 'PROMPT.md'), md);
 			out.push({ ...p, dir, md, r, d, asset });
@@ -194,13 +201,15 @@ export function pickPrompt({ pick, d, r, url, asset, dir }) {
 		else L.push(`It is a ${a.kind} animation${a.src ? ` (${a.src})` : ''}; use the same file or player.`);
 		L.push('');
 	}
+	if (r.motion) L.push(motionMarkdown(r.motion));
+	else { L.push('## Motion and interaction'); L.push('Not recorded: the pick could not be found in a fresh copy of the page (a login, a pop-up or content that changes each visit). Watch it on the page and describe what moves.'); L.push(''); }
 	if (r.code.fonts.length && d.text) {
 		L.push('## Fonts');
 		for (const f of r.code.fonts) L.push(`- ${f.family}: weights ${f.weights.join(', ') || '?'}; ${f.sources[0] ?? 'system font'}. Use the same font where the licence allows, or the closest free match with the same metrics.`);
 		L.push('');
 	}
 	L.push('## Check');
-	L.push(`Render yours next to the screenshot of the original at the same size (original.png${r.states && Object.keys(r.states).length ? ' and original-hover.png' : ''} in ${dir.replace(os.homedir(), '~')}), including the hover state; they must match pixel for pixel.`);
+	L.push(`Render yours next to the screenshot of the original at the same size (original.png${r.states && Object.keys(r.states).length ? ' and original-hover.png' : ''} in ${dir.replace(os.homedir(), '~')}), including the hover state; they must match pixel for pixel.${r.motion?.filmstrip ? ' Then play your motion against motion.png (key frames of the original, left to right in time).' : ''}`);
 	L.push('');
 	L.push(`_From ${url}. For learning, a redesign, or your own product: if you ship it, make the copy and any logo your own._`);
 	return L.join('\n');

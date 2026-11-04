@@ -156,10 +156,11 @@ Teach it. For each pick: show the exploded view, then walk through the layers bo
 				for (const x of good) {
 					try {
 						const files = Array.isArray(x.asset) ? x.asset.map((f) => ({ src: f.src, file: f.file })) : x.asset ? [{ src: x.asset.src, file: x.asset.file }] : [];
-						const b = await breakdown({ dir: x.dir, file: x.r.file, css: x.r.code.css, states: x.r.states, files, url: batch.url, label: `${x.label.split(' · ')[0]}, ${new URL(batch.url).host.replace(/^www\./, '')}`, note: x.note });
+						const b = await breakdown({ dir: x.dir, file: x.r.file, css: x.r.code.css, states: x.r.states, motion: x.r.motion, files, url: batch.url, label: `${x.label.split(' · ')[0]}, ${new URL(batch.url).host.replace(/^www\./, '')}`, note: x.note });
 						const lesson = path.join(x.dir, 'LESSON.md');
 						out.push(text(`── ${x.n}. ${x.label}${x.note ? ` · "${x.note}"` : ''}\nLesson: ${rel(lesson)}  (link: ${link(lesson)}) · exploded view: ${link(path.join(x.dir, 'exploded.png'))} · ${b.layers} layers\n\n${b.md}`));
 						out.push(image(b.exploded, 'image/png'));
+						if (existsSync(path.join(x.dir, 'motion.png'))) out.push(image(readFileSync(path.join(x.dir, 'motion.png')), 'image/png'));
 					} catch (e) {
 						out.push(text(`── ${x.n}. ${x.label}: could not take it apart (${e.message ?? e}). Its exact copy is still in ${rel(x.dir)}.`));
 					}
@@ -188,7 +189,7 @@ ${styleRule}
 ${dev ? (placed?.placed?.length ? `They showed where in their running site (${placed.url}): each pick below says the spot and the source file it is in.` : placed?.timedOut ? `Their site is running at ${dev} but they did not show where within 5 minutes.` : `They skipped showing where.`) : 'Their site is not running (no dev server found), so the spot comes from the note.'}
 
 Do it now, for each pick below:
-1. Read its PROMPT.md and component.html (paths below): the exact markup, every computed style, states, fonts, and how it changes on phones. Look at its screenshot.
+1. Read its PROMPT.md and component.html (paths below): the exact markup, every computed style, states, fonts, how it changes on phones, and its Motion and interaction section (every entrance, hover, press, scroll and pointer motion, with exact or measured timing and curves). Look at its screenshot and motion.png. The motion matters as much as the look: build every interaction listed.
 2. Build it as a component in this project, following its conventions (folder, naming, ${proj?.ts ? 'TypeScript, ' : ''}${proj?.styling ?? 'its styling'}). Make it responsive the way the original is (the "On phones" section). ${mine ? '' : 'Add the font if the project lacks it (or the closest free match, and say so). '}Replace their copy and logo with the person's own when it is obvious; otherwise keep the copy as a placeholder and say so.
 3. Put it at the spot: open the source file named, find the element by its text and classes, and insert the component above it, below it, or in place of it as asked. With no spot and no note, ask in one line where it should go.
 4. Check it: site_match with the pick folder, the page url and a selector for your component${mine ? ' (sizes and layout only)' : ''}. Fix what it flags (at most three rounds).
@@ -208,7 +209,7 @@ Markup there: ${w.at.html.slice(0, 300)}`;
 Folder: ${x.dir}
 PROMPT.md: ${path.join(x.dir, 'PROMPT.md')} · component.html: ${x.r.file}
 ${x.r.size.original.join('×')} px · ${x.r.snap.nodes} elements · ${x.r.stateRules.length} state rules · fonts: ${x.r.code.fonts.map((f) => f.family).join(', ') || 'system'}${x.r.mobile ? ` · phones: ${x.r.mobile.hidden ? 'hidden' : `${x.r.mobile.size.join('×')}, ${x.r.mobile.changes.length} layout changes`}` : ''}${spot}`));
-					if (existsSync(path.join(x.dir, 'original.png'))) out.push(image(readFileSync(path.join(x.dir, 'original.png')), 'image/png'));
+					for (const f of ['original.png', 'motion.png']) if (existsSync(path.join(x.dir, f))) out.push(image(readFileSync(path.join(x.dir, f)), 'image/png'));
 				}
 				if (placed?.snapshot) { out.push(text('Their page, with the spot marked:')); out.push(image(placed.snapshot, 'image/jpeg')); }
 				await pick.say(placed?.placed?.length ? `Building it in…` : `Your agent is adding it`);
@@ -226,7 +227,7 @@ Show the person each prompt below IN FULL inside its own \`\`\`markdown block, e
 Saved: ${rel(file)}  (link: ${link(file)})
 Copy check: ${match ? 'matches the original' : 'close, not exact'} (${(x.r.diff * 100).toFixed(1)}% pixel difference, size ${x.r.size.original.join('×')} → ${x.r.size.clone.join('×')})`));
 				out.push(text(x.md));
-				for (const f of ['original.png', 'original-hover.png']) if (existsSync(path.join(x.dir, f))) out.push(image(readFileSync(path.join(x.dir, f)), 'image/png'));
+				for (const f of ['original.png', 'original-hover.png', 'motion.png']) if (existsSync(path.join(x.dir, f))) out.push(image(readFileSync(path.join(x.dir, f)), 'image/png'));
 			}
 			return out;
 		},

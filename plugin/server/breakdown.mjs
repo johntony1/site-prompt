@@ -6,6 +6,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { goto, launch, shot, wait } from './chrome.mjs';
+import { motionMarkdown } from './motion.mjs';
 
 /** In the copy: every element that paints something, with what it paints and the effects on it. */
 function anatomy() {
@@ -100,7 +101,7 @@ function nameOf(n, files) {
 }
 
 /** How a layer is made, in plain words, from its paint and effects. */
-function howOf(n, states) {
+function howOf(n, states, motion = null) {
 	const L = [];
 	const say = (paint, fx, where = '') => {
 		for (const p of paint) {
@@ -141,9 +142,16 @@ function howOf(n, states) {
 		if (L.length > before) L.splice(before, 0, `drawn by its ${ps}: an extra layer CSS adds without any markup`);
 	}
 	const hoverKeys = Object.values(states ?? {}).flatMap((s) => Object.entries(s.hover ?? {})).filter(([j]) => +String(j).split('::')[0] === n.i);
-	if (n.fx.opacity === '0') L.push(hoverKeys.length ? 'hidden at rest, it fades in on hover' : 'hidden at rest (opacity 0): something brings it in, on scroll, a timer or a click. The motion itself is not captured yet');
-	else if (hoverKeys.length) L.push(`changes on hover: ${hoverKeys.flatMap(([, d]) => d).slice(0, 3).join('; ').slice(0, 160)}`);
-	return L;
+	const WHEN = { load: 'as the page loads', scroll: 'as it scrolls into view', idle: 'on a timer, on its own', hover: 'on hover', pointer: 'as the pointer moves over it', press: 'when pressed', click: 'on click' };
+	const mine = (motion?.motions ?? []).filter((m) => m.node === n.i && m.frames > 1 && m.trigger !== 'leave');
+	const loop = (motion?.loops ?? []).find((l) => l.node === n.i);
+	if (n.fx.opacity === '0') {
+		const m = mine.find((x) => x.prop === 'opacity') ?? mine[0];
+		L.push(m ? `hidden at rest, it comes in ${WHEN[m.trigger] ?? m.trigger}${m.delay > 20 ? ` (${m.delay} ms after)` : ''}, over ${m.exact?.duration ?? m.duration} ms` : hoverKeys.length ? 'hidden at rest, it fades in on hover' : 'hidden at rest (opacity 0): nothing in the recorded session (load, scroll, hover, press) brought it in, so something else does, like a click elsewhere or a state of the page');
+	} else if (hoverKeys.length) L.push(`changes on hover: ${hoverKeys.flatMap(([, d]) => d).slice(0, 3).join('; ').slice(0, 160)}`);
+	if (loop) L.push(`keeps moving on its own (${loop.css ? `CSS animation "${loop.css.name}", ${Math.round(loop.css.duration)} ms a cycle` : loop.continuous ? 'continuously' : `every ${loop.period} ms`})`);
+	else for (const m of mine.filter((x) => x.prop !== 'opacity' || n.fx.opacity !== '0').slice(0, 2)) L.push(`moves ${WHEN[m.trigger] ?? m.trigger}: ${m.prop}${m.spring ? ', on a spring' : m.exact ? `, ${m.exact.duration} ms ${m.exact.easing}` : m.bezier ? `, ${m.duration} ms cubic-bezier(${m.bezier.c.join(', ')})` : ''}`);
+	return [...new Set(L)];
 }
 
 const NOISE = /^(text-size-adjust|tab-size|box-sizing|-webkit-font-smoothing|pointer-events|vertical-align|min-height:auto|min-width:auto|aspect-ratio:auto|isolation|transform-origin)/;
@@ -166,7 +174,7 @@ export function cleanDecls(rule) {
 }
 
 /** Everything for "Break it down": LESSON.md, exploded.png, steps/step-N.png. */
-export async function breakdown({ dir, file, css, states, files = [], url, label, note }) {
+export async function breakdown({ dir, file, css, states, motion = null, files = [], url, label, note }) {
 	const { page, close } = await launch({ width: 1600, height: 1200 });
 	try {
 		await goto(page, pathToFileURL(file).href, { settle: 2500 });
@@ -196,7 +204,7 @@ export async function breakdown({ dir, file, css, states, files = [], url, label
 		await page.eval(`document.getElementById('sp-iso').textContent = ''`);
 		const rules = new Map();
 		for (const m of css.matchAll(/^\.c(\d+)(::(?:before|after))?\{([^}]*)\}/gm)) rules.set(`${m[1]}${m[2] ?? ''}`, cleanDecls(m[3]));
-		const info = layers.map((n, k) => ({ k: k + 1, n, name: nameOf(n, files), how: howOf(n, states) }));
+		const info = layers.map((n, k) => ({ k: k + 1, n, name: nameOf(n, files), how: howOf(n, states, motion) }));
 		// the exploded view: the layer pictures stacked apart in 3D, numbered, with a legend
 		const ex = await launch({ width: 1600, height: 1200 });
 		try {
@@ -252,7 +260,7 @@ export async function breakdown({ dir, file, css, states, files = [], url, label
 		if (structure.length) {
 			L.push('## The frame around it');
 			for (const n of structure) {
-				const how = howOf({ ...n, paint: [] }, states);
+				const how = howOf({ ...n, paint: [] }, states, motion);
 				if (how.length) L.push(`- .c${n.i} (${n.tag}): ${how.join('; ')}`);
 			}
 			L.push('');
@@ -276,6 +284,7 @@ export async function breakdown({ dir, file, css, states, files = [], url, label
 			L.push('```');
 			L.push('');
 		}
+		if (motion) { L.push(motionMarkdown(motion, { short: true }).replace('## Motion and interaction', '## How it moves')); L.push(''); }
 		L.push('## Make it yours');
 		L.push('Keep the technique, change the values: the colours of the fills and gradients, the corner radius, how deep the shadows go, the tilt, and the art itself. The structure (what sits on what, what clips what, what fades in) is what makes it work.');
 		L.push('');

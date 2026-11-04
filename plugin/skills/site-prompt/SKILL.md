@@ -41,6 +41,17 @@ or says "pick", "hover", "point at":
    markdown block with its saved link. Then call `site_pick` (no url) again to wait for more, until they say they
    are done; then `stop: true`.
 
+## Motion and interaction (every pick)
+
+Every pick's motion is recorded too, in a Chrome of its own (their page never moves): the page loading, scrolling it
+into view, sitting still, hover, the pointer moving across it, leaving, press (and click when that is safe). The
+prompt's "Motion and interaction" section lists each move by trigger with its timing and curve: exact when the page
+says so (CSS transitions and animations, element.animate as used by Motion and Framer Motion, GSAP calls with their
+ScrollTrigger), measured otherwise (a fitted cubic-bezier, or a spring with stiffness and damping when it
+overshoots), plus moves tied to scroll, pointer-following tilts, loops and staggers; motion.png shows key frames.
+Interaction is usually what people want from a site: when building a pick, build every motion listed, not only the
+look. Sites behind a login are recorded logged out.
+
 ## Break it down (to learn, or remake it their own way)
 
 The note card on a pick offers **Break it down** beside Get prompt. When they press it (or ask how something is

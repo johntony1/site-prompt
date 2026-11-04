@@ -155,6 +155,7 @@ try {
 	check(/What I want from it:\*\* the soft inner highlight/.test(btn), 'the button prompt carries the note');
 	check(/```html[\s\S]*Try Halo free[\s\S]*```css[\s\S]*border-top-left-radius:12px/.test(btn) && /\.c0:hover\{[^}]*background-color/.test(btn), 'the button prompt has its exact code and hover state');
 	check(/## Type[\s\S]*64px \/ line height 67.2px, weight 700, letter spacing -1.28px/.test(txt) && txt.includes('"Halo keeps your team in orbit"'), 'the text prompt has the full type spec and the copy', txt.match(/## Type[\s\S]{0,200}/)?.[0]);
+	check(/## Motion and interaction[\s\S]*### On hover[\s\S]*180 ms, ease \(exact, from the page's CSS transition\)/.test(btn), 'the button prompt has its hover motion, exactly (180 ms ease)', btn.match(/### On hover[\s\S]{0,240}/)?.[0]);
 	check(/- 1 line at this width/.test(btn), 'a one-line button is one line', btn.match(/- \d+ lines? at this width/)?.[0]);
 	check(/## On phones \(390 px wide\)[\s\S]*font-size 64px → 40px/.test(txt), 'the headline prompt says how it changes on phones', txt.match(/## On phones[\s\S]{0,160}/)?.[0]);
 	check(/## On phones[\s\S]*hidden on phones|The original hides it/.test(art), 'the drawing prompt says it is hidden on phones', art.match(/## On phones[\s\S]{0,120}/)?.[0]);

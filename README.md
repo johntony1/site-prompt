@@ -53,6 +53,15 @@ in your running dev server against the original with `site_match` and fixes what
 - **Phones too.** Every pick is also read at 390 px wide, so the prompt says what the original changes there.
 - **Answers in the toolbar.** When it is built, your agent says so in the toolbar ("✓ Added to Hero.tsx, 99% match").
 
+## Motion and interaction
+
+Every pick also records how it moves. A Chrome of its own replays a person on the page (load, scroll it into
+view, wait, hover, move across it, leave, press) and records every animated property, frame by frame. The prompt
+gets each move by trigger with its timing and curve: exact where the page says so (CSS transitions and animations,
+`element.animate` from Motion and Framer Motion, GSAP calls and their ScrollTrigger), measured and fitted otherwise
+(a cubic-bezier, or a spring's stiffness and damping), plus scroll-linked moves, pointer-following tilts, loops and
+staggers, and a filmstrip of the key frames (motion.png).
+
 ## Break it down
 
 Want to learn how something is made, or make your own version? Pick it and press **Break it down** in the note
