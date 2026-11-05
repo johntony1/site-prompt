@@ -8,7 +8,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { clone } from './component.mjs';
 import { compare, PASS } from './compare.mjs';
-import { image, serve, text, ToolError } from './mcp.mjs';
+import { client, image, serve, text, ToolError } from './mcp.mjs';
+import { machineId, track } from './telemetry.mjs';
 import { compose } from './prompt.mjs';
 import { read } from './read.mjs';
 import { buildStack } from './stack.mjs';
@@ -18,7 +19,7 @@ import { fileTokens, findSource } from './place.mjs';
 import { breakdown, lessonOf, viewOf } from './breakdown.mjs';
 import { match } from './match.mjs';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 // everything lands in the person's Documents, one folder per site (the prompt with its reference files beside it)
 const base = () => process.env.SITE_PROMPT_OUT || path.join(os.homedir(), 'Documents', 'Site Prompts');
 const slug = (u) => {
@@ -142,9 +143,11 @@ Show the person, in this order:
 				const o = await pick.open(url, { mode: a.mode });
 				opened = `Opened ${url} with the picker in ${o.own ? 'your own Chrome' : 'a Chrome window site-prompt opened (it remembers sign-ins)'}. `;
 			}
-			const batch = await pick.next(Math.min(600, Math.max(5, Number(a.wait) || 240)));
+			// agents that cut a tool call off sooner (Cursor, Windsurf, VS Code) set SITE_PROMPT_WAIT lower; the reply says to call again
+			const batch = await pick.next(Math.min(600, Math.max(5, Number(a.wait) || Number(process.env.SITE_PROMPT_WAIT) || 240)));
 			if (!batch) return `${opened}Nothing picked yet; the picker is still open. Call site_pick again right now (no url) to keep waiting. Do not end your turn or wait for the person to reply: they are picking in Chrome, and the picks arrive through site_pick.`;
 			const results = await pick.processBatch(batch, base());
+			if (batch.action === 'learn' || batch.action === 'add') track('tool', { tool: batch.action === 'learn' ? 'break_down' : 'add_to_project', agent: client.name }, VERSION);
 			const good = results.filter((x) => !x.error);
 			const failed = results.filter((x) => x.error).map((x) => `\nCould not read ${x.n} (${x.label}): ${x.error}`).join('');
 			const proj = project();
@@ -356,4 +359,9 @@ function componentPrompt(url, r, stateLines, name) {
 	].join('\n');
 }
 
-serve({ name: 'site-prompt', version: VERSION, instructions: INSTRUCTIONS, tools });
+// anonymous counts (telemetry.mjs says exactly what): a first run on this machine, and each tool used
+serve({
+	name: 'site-prompt', version: VERSION, instructions: INSTRUCTIONS, tools,
+	onInitialize: () => { if (machineId().fresh) track('first_run', { agent: client.name }, VERSION); },
+	onCall: (tool, ok) => track('tool', { tool, ok, agent: client.name }, VERSION),
+});

@@ -1,0 +1,8 @@
+name = "site-prompt-stats"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "site-prompt-stats"
+database_id = "3d22190f-9c51-4525-8893-3327db7fdc5e"

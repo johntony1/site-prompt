@@ -3,14 +3,42 @@
 Paste any website and get what it takes to rebuild it pixel perfect: a build prompt with every measurement, an exact
 copy of the page, and a check that your rebuild matches. Click any part of a page to clone just that component.
 
-A Claude Code (and Codex) plugin. Plain Node 22+ and the Chrome already on your machine; nothing to install.
+A skill for coding agents: Claude Code, Codex, Cursor, Gemini CLI, Grok CLI, Windsurf, VS Code (Copilot), Claude
+Desktop, opencode, Zed, and anything else that speaks MCP. Plain Node 22+ and the Chrome already on your machine;
+nothing else to install.
 
-    git clone https://github.com/johntony1/site-prompt && sh site-prompt/install.sh
-    # then, in any Claude Code session:
-    /site-prompt https://linear.app
-    /site-prompt pick https://linear.app     # hover what you like, click it, Get prompts
+## Install
 
-(Or as a plugin: `/plugin marketplace add johntony1/site-prompt`, then `/site-prompt:prompt <link>`.)
+    git clone https://github.com/johntony1/site-prompt && node site-prompt/install.mjs
+
+It finds every agent on your machine and adds site-prompt to each one (the MCP server, and the skill where the agent
+reads skills). Only installed agents are touched, every file it edits is backed up first (`.bak`), and running it
+again updates. `--only codex,cursor` picks agents, `--dry-run` shows what it would do, `--uninstall` takes it out.
+
+Then restart your agent and ask: "pick from https://linear.app". In Claude Code: `/site-prompt pick https://linear.app`.
+
+| Agent | Where it goes |
+| --- | --- |
+| Claude Code | user MCP server + `~/.claude/skills/site-prompt` (or `/plugin marketplace add johntony1/site-prompt`, then `/plugin install site-prompt@site-prompt`) |
+| Codex | `~/.codex/config.toml` + `~/.agents/skills/site-prompt` |
+| Cursor | `~/.cursor/mcp.json` + `~/.cursor/skills/site-prompt` |
+| Gemini CLI | an extension in `~/.gemini/extensions/site-prompt` |
+| Grok CLI | `~/.grok/user-settings.json` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| VS Code (Copilot) | your user `mcp.json` |
+| Claude Desktop | `claude_desktop_config.json` |
+| opencode | `~/.config/opencode/opencode.json` + its skills folder |
+| Zed | `context_servers` in your settings (comments kept) |
+
+**Any other MCP client:** add a stdio server that runs `node ~/.site-prompt/app/server/server.mjs` (after running the
+installer once), for example:
+
+```json
+{ "mcpServers": { "site-prompt": { "command": "node", "args": ["/Users/you/.site-prompt/app/server/server.mjs"], "env": { "SITE_PROMPT_WAIT": "50" } } } }
+```
+
+`SITE_PROMPT_WAIT` is how long pick mode waits inside one tool call (default 240 s). Set it below your client's tool
+timeout; the agent is told to call again while you are still picking.
 
 ## What you get
 
@@ -104,6 +132,16 @@ The browser only receives the built site, so the stack is named from fingerprint
 claimed. Pages behind logins or heavy bot protection may not load. Canvas, WebGL and video are photographed, not
 measured. For learning, redesigns or your own product: if you publish a rebuild, use your own name, logo, copy and
 images.
+
+## What it counts
+
+Site Prompt sends anonymous counts so I can see how many people use it and in which agents: a random id made on your
+machine, the event (an install, a first run, a tool used), the tool's name and whether it worked, the agent's name,
+the version, your OS, and the country Cloudflare sees. Never URLs, page content, prompts, files or names. The code
+that receives it is in [`stats/`](stats/). Turn it off with `SITE_PROMPT_TELEMETRY=0` or `DO_NOT_TRACK=1`, or by
+creating `~/.site-prompt/no-telemetry`.
+
+## Tests
 
     node test/test.mjs     # end to end against a local page with known answers
     node test/view.mjs     # the breakdown view

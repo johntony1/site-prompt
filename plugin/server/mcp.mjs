@@ -10,7 +10,7 @@ export class ToolError extends Error {}
 export const client = { name: '' };
 
 /** tools: [{name, description, inputSchema, run(args, ctx) → content[] | string}] */
-export function serve({ name, version, instructions, tools, onInitialize }) {
+export function serve({ name, version, instructions, tools, onInitialize, onCall }) {
 	const byName = new Map(tools.map((t) => [t.name, t]));
 	const write = (msg) => process.stdout.write(JSON.stringify(msg) + '\n');
 	const log = (...a) => process.stderr.write('[site-prompt] ' + a.join(' ') + '\n');
@@ -47,9 +47,11 @@ export function serve({ name, version, instructions, tools, onInitialize }) {
 					try {
 						const out = await tool.run(params.arguments ?? {});
 						const content = typeof out === 'string' ? [{ type: 'text', text: out }] : out;
+						onCall?.(tool.name, true);
 						return reply({ content });
 					} catch (e) {
 						// A tool's own failure is a RESULT the agent reads and fixes, not a protocol error.
+						onCall?.(tool.name, false);
 						const text = e instanceof ToolError ? e.message : `site-prompt hit an error: ${e?.stack ?? e}`;
 						if (!(e instanceof ToolError)) log(String(e?.stack ?? e));
 						return reply({ content: [{ type: 'text', text }], isError: true });

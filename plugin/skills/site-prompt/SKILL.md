@@ -2,9 +2,9 @@
 name: site-prompt
 description: "Turn any website, or any part of one, into a build prompt precise enough to rebuild it 1:1: layout, spacing, type, colours, depth, copy, hover states, scroll motion and the stack it was built with, all measured from the live page in Chrome, with screenshots, and a check that the rebuild matches. Use when the user pastes a site or landing page link and wants it cloned, recreated, rebuilt or turned into a prompt, wants one component (a button, card, nav, hero, pricing table) copied exactly, wants a component from another site added to the project they are building ("grab that pricing card from Linear", "add Stripe's button to my site"), or wants a rebuild compared with the original."
 license: MIT
-compatibility: Claude Code or Codex with the site-prompt MCP server. Node 22+ and Google Chrome (or Chromium, Edge, Brave).
+compatibility: Any coding agent with the site-prompt MCP server (Claude Code, Codex, Cursor, Gemini CLI, Grok CLI, Windsurf, VS Code, opencode, Zed). Node 22+ and Google Chrome (or Chromium, Edge, Brave).
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # site-prompt
