@@ -438,7 +438,7 @@ export async function instant(el, title, area = null) {
 	// motion as background (a few floating parts) gets its own layer; motion that IS the drawing (most of it moves, or
 	// it is an svg) stays in its groups and plays there: the mirror animates every copy wherever it sits
 	const paintingCount = a.nodes.filter((n) => n.paint.length || Object.values(n.pseudos).some((v) => v.paint.length)).length || 1;
-	const motionIsTheThing = el.tagName.toLowerCase() === 'svg' || el.querySelector(':scope > svg') && el.children.length === 1 || moving.size / paintingCount > 0.4;
+	const motionIsTheThing = el.tagName.toLowerCase() === 'svg' || el.querySelector(':scope > svg') && el.children.length === 1 || (moving.size >= 6 && moving.size / paintingCount > 0.5);
 	let groups = K.groupLayers(seenNodes, [], 12, motionIsTheThing ? null : movingTop);
 	// background motion sits low in the stack, just above the panel
 	const mv = groups.find((g) => g.moving);
