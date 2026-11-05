@@ -105,6 +105,11 @@ export function viewer() {
 		.bar input::-moz-range-progress{height:4px;border-radius:2px;background:var(--blue2)}
 		.bar input::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:#f7f8f8}
 		.bar .sep{width:1px;height:18px;background:var(--line);margin:0 2px}
+		.views{display:flex;padding:2px;gap:1px;border-radius:8px;background:rgba(255,255,255,.035);box-shadow:inset 0 0 0 1px var(--line)}
+		.vb{appearance:none;border:0;width:30px;height:26px;border-radius:6px;display:grid;place-items:center;color:var(--muted);background:transparent;cursor:pointer;transition:background .12s ease,color .12s ease}
+		.vb svg{width:15px;height:15px}
+		.vb:hover{color:var(--ink2)}
+		.vb.on{background:rgba(255,255,255,.1);color:var(--ink);box-shadow:0 0 0 1px var(--line2),0 1px 2px rgba(0,0,0,.4)}
 		.bar kbd{font:500 10.5px/1 var(--mono);color:var(--muted);padding:3px 5px;border-radius:4px;box-shadow:inset 0 0 0 1px var(--line)}
 		.copy{position:absolute;left:0;top:0;transform:translateZ(.5px);pointer-events:none}
 		.copy *,.copy *::before,.copy *::after{transition:none!important;animation:none!important}
@@ -118,7 +123,7 @@ export function viewer() {
 		<div class="head"><small>Breakdown</small><h2>${esc(V.title)}</h2><p>${n} layers · hover one to inspect · drag to turn</p><div class="was"><span>You picked</span><div class="thumb"><div class="tin">${V.html ? `<div class="whole">${V.html}</div>` : V.layers.map((l) => (l.png ? `<img src="data:image/png;base64,${l.png}">` : '')).join('')}</div></div></div></div>
 		<div class="labels">${V.layers.slice().reverse().map((l) => `<div class="label" data-k="${l.n - 1}"><b>${pad2(l.n)}</b>${esc(l.name.replace(/ \(layer-\d+\.\w+\)/, ''))}</div>`).join('')}</div>
 		<div class="spec"></div>
-		<div class="bar"><label>Spread <input type="range" min="0" max="100" value="60"></label><button class="b" data-a="flat">Flatten</button><span class="sep"></span><button class="b p" data-a="all">Copy whole thing</button><button class="b" data-a="close">Close <kbd>esc</kbd></button></div>
+		<div class="bar"><div class="views"><button class="vb on" data-v="top" title="From above"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 2.5l5.5 3L8 8.5l-5.5-3L8 2.5z"/><path d="M2.5 8.5L8 11.5l5.5-3"/><path d="M2.5 11L8 14l5.5-3" opacity=".55"/></svg></button><button class="vb" data-v="front" title="Facing you"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="2" y="3.5" width="7" height="9" rx="1.2"/><path d="M11 4.5v7M13.5 5.5v5" opacity=".75"/></svg></button></div><span class="sep"></span><label>Spread <input type="range" min="0" max="100" value="60"></label><button class="b" data-a="flat">Flatten</button><span class="sep"></span><button class="b p" data-a="all">Copy whole thing</button><button class="b" data-a="close">Close <kbd>esc</kbd></button></div>
 	</div>`;
 	document.documentElement.appendChild(host);
 	const $ = (s) => root.querySelector(s);
@@ -156,10 +161,11 @@ export function viewer() {
 	Object.assign(stage.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
 	Object.assign(stack.style, { left: V.offset.x + 'px', top: V.offset.y + 'px', width: V.clip.w + 'px', height: V.clip.h + 'px' });
 	let hot = null;
-	let rx = 0, rz = 0, spread = 0.6, flat = false, tx = 0, ty = 0, sc = 1;
+	const ANGLES_START = { ry: 0, rx: 55, rz: -40 };
+	let ry = 0, rx = 0, rz = 0, spread = 0.6, flat = false, tx = 0, ty = 0, sc = 1;
 	const gap = () => (flat ? 0 : spread * 1.6 * Math.max(40, Math.min(170, Math.max(V.clip.w, V.clip.h) * 0.16)));
 	const apply = () => {
-		stack.style.transform = `translate(${tx}px, ${ty}px) scale(${sc}) rotateX(${flat ? 0 : rx}deg) rotateZ(${flat ? 0 : rz}deg)`;
+		stack.style.transform = `translate(${tx}px, ${ty}px) scale(${sc}) rotateY(${flat ? 0 : ry}deg) rotateX(${flat ? 0 : rx}deg) rotateZ(${flat ? 0 : rz}deg)`;
 		planes.forEach((p, k) => { p.style.transform = `translateZ(${k * gap() + (k === hot && !flat ? gap() * 0.35 : 0)}px)`; });
 	};
 	// the free space: between the labels on the left and the card on the right
@@ -200,7 +206,7 @@ export function viewer() {
 		all.forEach((e) => (e.style.transition = ''));
 		planes.forEach((p, k) => (p.style.transitionDelay = `${k * 40}ms`));
 		requestAnimationFrame(() => requestAnimationFrame(() => {
-			({ rx, rz, tx, ty, sc } = target);
+			({ ry, rx, rz, tx, ty, sc } = target);
 			flat = false;
 			v.classList.add('on');
 			apply();
@@ -274,9 +280,27 @@ export function viewer() {
 		for (let k = planes.length - 1; k >= 0; k--) if (inside(corners(planes[k]), e.clientX, e.clientY)) { setHot(k); return; }
 	});
 	let drag = null;
-	canvas.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, rx, rz }; canvas.classList.add('drag'); stack.classList.add('fast'); canvas.setPointerCapture(e.pointerId); });
-	canvas.addEventListener('pointermove', (e) => { if (!drag) return; rz = drag.rz + (e.clientX - drag.x) * 0.3; rx = Math.max(0, Math.min(85, drag.rx - (e.clientY - drag.y) * 0.3)); flat = false; apply(); });
+	canvas.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, rx, rz, ry }; canvas.classList.add('drag'); stack.classList.add('fast'); canvas.setPointerCapture(e.pointerId); });
+	canvas.addEventListener('pointermove', (e) => { if (!drag) return; if (Math.abs(drag.ry) > 5) { ry = Math.max(-80, Math.min(80, drag.ry + (e.clientX - drag.x) * 0.3)); rx = Math.max(-40, Math.min(85, drag.rx - (e.clientY - drag.y) * 0.3)); } else { rz = drag.rz + (e.clientX - drag.x) * 0.3; rx = Math.max(0, Math.min(85, drag.rx - (e.clientY - drag.y) * 0.3)); } flat = false; apply(); });
 	canvas.addEventListener('pointerup', () => { drag = null; canvas.classList.remove('drag'); stack.classList.remove('fast'); });
+	const ANGLES = { top: { ry: 0, rx: 55, rz: -40 }, front: { ry: -38, rx: 8, rz: 0 } };
+	const views = [...root.querySelectorAll('.vb')];
+	const setView = (name) => {
+		views.forEach((b) => b.classList.toggle('on', b.dataset.v === name));
+		const was = { tx, ty, sc };
+		// where it will sit, measured with transitions off, then animated there
+		const all2 = [stack, ...planes];
+		all2.forEach((e) => (e.style.transition = 'none'));
+		({ ry, rx, rz } = ANGLES[name]);
+		flat = false; flatBtn.textContent = 'Flatten';
+		tx = 0; ty = 0; sc = 1; apply(); refit(); refit();
+		const to = { tx, ty, sc };
+		({ tx, ty, sc } = was); apply();
+		stack.getBoundingClientRect();
+		all2.forEach((e) => (e.style.transition = ''));
+		requestAnimationFrame(() => { ({ tx, ty, sc } = to); apply(); });
+	};
+	views.forEach((b) => b.addEventListener('click', () => setView(b.dataset.v)));
 	const range = $('input[type=range]');
 	range.addEventListener('input', () => { spread = range.value / 100; range.style.setProperty('--v', range.value + '%'); flat = false; apply(); });
 	const flatBtn = $('[data-a=flat]');
@@ -300,7 +324,7 @@ export function viewer() {
 		apply();
 		setTimeout(() => { if (el) el.style.visibility = was; host.remove(); window.__spViewerOpen = false; }, 1050);
 	};
-	const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); close(); } };
+	const onKey = (e) => { if ((e.key === 'v' || e.key === 'V') && !e.metaKey && !e.ctrlKey) { setView(views.find((b) => !b.classList.contains('on')).dataset.v); return; } if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); close(); } };
 	addEventListener('keydown', onKey, true);
 	$('[data-a=close]').addEventListener('click', close);
 	window.__spViewClose = close;
