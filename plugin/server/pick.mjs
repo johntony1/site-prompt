@@ -119,6 +119,8 @@ async function phoneIn(page, sel, dir, vw, vh) {
  * they opened) is it read on their page.
  */
 export async function processBatch(batch, baseDir, { log = () => {} } = {}) {
+	// taking it apart: get to the picture fast; the phone check and the copy check are skipped, the motion follows later
+	const quick = batch.action === 'learn';
 	const s = session;
 	if (!s) throw new ToolError('The picking session closed.');
 	const host = new URL(batch.url).host.replace(/^www\./, '').replace(/[^\w.-]+/g, '-');
@@ -128,7 +130,7 @@ export async function processBatch(batch, baseDir, { log = () => {} } = {}) {
 	const copyPage = async () => {
 		if (copy) return copy;
 		copy = await launch({ width: vp.w, height: vp.h });
-		await goto(copy.page, batch.url, { settle: 5000 });
+		await goto(copy.page, batch.url, { settle: quick ? 2000 : 4000 });
 		return copy;
 	};
 	try {
@@ -151,15 +153,15 @@ export async function processBatch(batch, baseDir, { log = () => {} } = {}) {
 				if (inCopy) {
 					await wait(400);
 					await settled(c.page, '[data-sp-copy]');
-					r = await extract(c.page, '[data-sp-copy]', dir, batch.url, { own: false, log });
+					r = await extract(c.page, '[data-sp-copy]', dir, batch.url, { own: false, log, check: !quick });
 					await s.page.eval(`window.__spStatus?.(${JSON.stringify(`Checking ${p.n} at phone width…`)})`).catch(() => {});
-					r.mobile = await phoneIn(c.page, '[data-sp-copy]', dir, vp.w, vp.h).catch(() => null);
+					r.mobile = quick ? null : await phoneIn(c.page, '[data-sp-copy]', dir, vp.w, vp.h).catch(() => null);
 					r.where = 'copy';
 				} else {
 					// only on their page: read it there, keeping the picker out of the pictures
 					await s.page.eval(`window.__spHide?.(true, ${JSON.stringify(sel)})`).catch(() => {});
-					r = await extract(s.page, sel, dir, batch.url, { own: s.own, log }).finally(() => s.page.eval('window.__spHide?.(false)').catch(() => {}));
-					r.mobile = await atPhoneWidth(s, sel, dir, batch.url).catch(() => null);
+					r = await extract(s.page, sel, dir, batch.url, { own: s.own, log, check: !quick }).finally(() => s.page.eval('window.__spHide?.(false)').catch(() => {}));
+					r.mobile = quick ? null : await atPhoneWidth(s, sel, dir, batch.url).catch(() => null);
 					r.where = 'page';
 				}
 				let asset = null;
@@ -169,11 +171,21 @@ export async function processBatch(batch, baseDir, { log = () => {} } = {}) {
 					for (const [k, l] of files.entries()) { const got = await download(l.src, dir, batch.url, `layer-${k + 1}`); if (got) asset.push({ ...got, layer: l }); }
 					if (!asset.length) asset = null;
 				} else if (d.art?.src && /^https?:/.test(d.art.src) && d.art.kind !== 'video') asset = await download(d.art.src, dir, batch.url);
-				await s.page.eval(`window.__spStatus?.(${JSON.stringify(`Recording how ${p.n} moves…`)})`).catch(() => {});
-				r.motion = await motionRun;
-				const md = pickPrompt({ pick: p, d, r, url: batch.url, asset, dir });
-				writeFileSync(path.join(dir, 'PROMPT.md'), md);
-				out.push({ ...p, dir, md, r, d, asset, elPath });
+				if (quick) {
+					// the motion arrives later; the prompt is written again when it does
+					r.motion = null;
+					const item = { ...p, dir, r, d, asset, elPath, motionRun };
+					item.finish = async () => { r.motion = await motionRun; item.md = pickPrompt({ pick: p, d, r, url: batch.url, asset, dir }); writeFileSync(path.join(dir, 'PROMPT.md'), item.md); return r.motion; };
+					item.md = pickPrompt({ pick: p, d, r, url: batch.url, asset, dir });
+					writeFileSync(path.join(dir, 'PROMPT.md'), item.md);
+					out.push(item);
+				} else {
+					await s.page.eval(`window.__spStatus?.(${JSON.stringify(`Recording how ${p.n} moves…`)})`).catch(() => {});
+					r.motion = await motionRun;
+					const md = pickPrompt({ pick: p, d, r, url: batch.url, asset, dir });
+					writeFileSync(path.join(dir, 'PROMPT.md'), md);
+					out.push({ ...p, dir, md, r, d, asset, elPath });
+				}
 			} catch (e) {
 				await motionRun;
 				out.push({ ...p, error: String(e.message ?? e) });
@@ -218,7 +230,7 @@ export function pickPrompt({ pick, d, r, url, asset, dir }) {
 	if (pick.note) { L.push(`**What I want from it:** ${pick.note}`); L.push(''); }
 	L.push(`It is a ${size} ${kind} on ${url}${d.text && pick.kind !== 'section' ? ` ("${d.text.split('\n')[0].slice(0, 80)}")` : ''}. Build it so it looks exactly the same: same size, spacing, type, colours, radius, shadows, states and motion, nothing moved, nothing restyled.`);
 	L.push('');
-	L.push(`The code below is its exact markup and every style the browser computed for it on the live page. On its own it renders like the original (checked against a screenshot: ${(r.diff * 100).toFixed(1)}% pixel difference). Keep every value as given. Rename the positional classes (c0, c1…) to meaningful ones and write it in this project's stack (React + Tailwind if there is none), without changing how it looks.`);
+	L.push(`The code below is its exact markup and every style the browser computed for it on the live page. On its own it renders like the original${r.diff == null ? '' : ` (checked against a screenshot: ${(r.diff * 100).toFixed(1)}% pixel difference)`}. Keep every value as given. Rename the positional classes (c0, c1…) to meaningful ones and write it in this project's stack (React + Tailwind if there is none), without changing how it looks.`);
 	L.push('');
 	const code = r.code.html.length + r.code.css.length < 60_000;
 	L.push('## Exact code');
@@ -425,11 +437,18 @@ export async function devTokens(devUrl) {
 }
 
 /** Break it down on the page itself: the pick lifts off and splits into its layers in 3D, with a labelled panel. */
-export async function showView(elPath, view, title) {
+export async function showView(elPath, view, title, all = null) {
 	if (!session) return false;
-	const data = { ...view, path: elPath, title };
+	const data = { ...view, path: elPath, title, all };
 	await session.page.send('Page.bringToFront').catch(() => {});
 	await session.page.eval(`${LOOK} window.__spView = ${JSON.stringify(data)}; (${viewer.toString()})()`, 60_000);
+	return true;
+}
+
+/** New card rows and prompts for the open view (the motion arrived). */
+export async function updateView(patch) {
+	if (!session) return false;
+	await session.page.eval(`window.__spViewUpdate?.(${JSON.stringify(patch)})`, 30_000);
 	return true;
 }
 

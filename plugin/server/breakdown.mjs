@@ -6,7 +6,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { goto, launch, shot, wait } from './chrome.mjs';
-import { motionMarkdown } from './motion.mjs';
+import { change, curve, motionMarkdown } from './motion.mjs';
 
 /** In the copy: every element that paints something, with what it paints and the effects on it. */
 function anatomy() {
@@ -174,8 +174,145 @@ export function cleanDecls(rule) {
 	return d.filter((x) => !NOISE.test(x));
 }
 
+const slugOf = (t) => String(t).toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) || 'layer';
+const colorOf = (g) => (g.match(/rgba?\([^)]*\)|#[0-9a-f]{3,8}/gi) ?? []);
+
+/** The spec rows of a layer's card: what it is made of, in the words a designer would use. */
+export function specsOf(n, motion) {
+	const rows = [];
+	const add = (k, v, sw) => rows.push(sw ? { k, v, sw } : { k, v });
+	add('Size', `${n.box.w} × ${n.box.h}`);
+	const paints = [...n.paint.map((p) => ({ ...p, ps: '' })), ...Object.entries(n.pseudos).flatMap(([ps, v]) => v.paint.map((p) => ({ ...p, ps })))];
+	for (const p of paints) {
+		const via = p.ps ? ` (${p.ps})` : '';
+		if (p.k === 'fill') add(`Fill${via}`, p.v.replace(/\s+/g, ''), p.v);
+		if (p.k === 'gradient') add(`Gradient${via}`, `${/radial/.test(p.v) ? 'radial' : /conic/.test(p.v) ? 'conic' : 'linear'}, ${colorOf(p.v).length} stops`, p.v);
+		if (p.k === 'border') add(`Stroke${via}`, p.v.replace(/ solid/, ''), p.v.match(/rgba?\([^)]*\)/)?.[0]);
+		if (p.k === 'shadow') {
+			const inner = p.v.filter((x) => /inset/.test(x)), outer = p.v.filter((x) => !/inset/.test(x));
+			if (outer.length) add(`Shadow${via}`, `${outer.length > 1 ? `${outer.length} stacked, ` : ''}blur ${outer.map(blurOf).join(' / ')}px`);
+			if (inner.length) add(`Inner edge${via}`, `${inner.length} inset`);
+		}
+		if (p.k === 'media') add('Art', /\.svg/i.test(p.v) || p.v === 'svg' ? 'SVG, vector' : 'image');
+		if (p.k === 'text') add('Text', `"${p.v.slice(0, 28)}"`);
+	}
+	const fx = { ...n.fx, ...Object.values(n.pseudos).reduce((o, v) => ({ ...v.fx, ...o }), {}) };
+	if (fx.radius) add('Corner radius', fx.radius);
+	if (fx.clip) add('Clips content', 'yes, to its corners');
+	if (fx.opacity && fx.opacity !== '1') add('Opacity at rest', fx.opacity);
+	if (fx.transform) { const d = deg(fx.transform); if (d) add('Tilt', `${d}°`); }
+	if (fx.bleed) add('Overhangs', `${fx.bleed}px past its box`);
+	if (fx.mask) add('Mask', /linear-gradient/.test(fx.mask) ? 'gradient fade' : 'shape');
+	if (fx.perspective) add('Perspective', fx.perspective);
+	if (fx.backdrop) add('Backdrop', fx.backdrop);
+	if (fx.filter) add('Filter', fx.filter);
+	const WHEN = { load: 'on load', scroll: 'on scroll into view', idle: 'on its own', hover: 'on hover', pointer: 'follows the pointer', press: 'on press', click: 'on click' };
+	if (motion === undefined) add('Motion', 'recording…');
+	else if (motion) {
+		let mine = motion.motions.filter((m) => m.node === n.i && m.frames > 2 && m.trigger !== 'leave');
+		if (mine.some((m) => m.exact)) mine = mine.filter((m) => m.exact).filter((m, k, a2) => a2.findIndex((x) => x.exactId === m.exactId) === k);
+		const loop = motion.loops.find((l) => l.node === n.i);
+		for (const m of mine.slice(0, 3)) add(`Moves ${WHEN[m.trigger] ?? m.trigger}`, `${m.exact?.duration ?? m.duration} ms${m.delay > 20 || m.exact?.delay ? `, after ${m.exact?.delay || m.delay} ms` : ''}${m.spring ? ', spring' : m.exact?.easing && !/^eased per/.test(m.exact.easing) ? `, ${m.exact.easing}` : m.bezier ? `, cubic-bezier(${m.bezier.c.join(', ')})` : ''}`);
+		if (loop) add('Loops', loop.css ? `${Math.round(loop.css.duration)} ms, forever` : loop.continuous ? 'continuously' : `every ${loop.period} ms`);
+		if (!mine.length && !loop) add('Motion', 'none');
+	}
+	return rows;
+}
+
+/** A prompt that builds just this layer: its exact CSS under a real name, how it moves, its art. */
+export function layerPrompt(ctx, x, motion) {
+	const { n } = x, cls = slugOf(x.name);
+	const host = (() => { try { return new URL(ctx.url).host.replace(/^www\./, ''); } catch { return ctx.url; } })();
+	const css = [`${n.i}`, `${n.i}::before`, `${n.i}::after`].filter((k) => ctx.rules.has(k)).map((k) => `.${cls}${k.replace(/^\d+/, '')} { ${ctx.rules.get(k).join('; ')} }`).join('\n');
+	const L = [];
+	L.push(`# Build this: ${x.name.replace(/ \(layer-\d+\.\w+\)/, '')}, from ${host}`);
+	L.push('');
+	L.push(`It is one layer (${x.k} of ${ctx.info.length}, counted from the bottom) of a ${ctx.label} on ${ctx.url}. How it is made:`);
+	for (const h of x.how) L.push(`- ${h}`);
+	L.push('');
+	L.push('## Exact CSS (computed on the live page)');
+	L.push('```css');
+	L.push(css || `/* no styles of its own */`);
+	L.push('```');
+	const media = n.paint.find((p) => p.k === 'media');
+	if (media) { const f = ctx.files.find((y) => y.src === media.v); L.push(''); L.push(`## The art`); L.push(`Use the file itself: ${f ? `${f.file} (from ${media.v})` : media.v}${/\.svg/i.test(media.v) ? ', and keep it as SVG' : ''}.`); }
+	if (motion) {
+		let mine = motion.motions.filter((m) => m.node === n.i && m.frames > 2 && m.trigger !== 'leave');
+		if (mine.some((m) => m.exact)) mine = mine.filter((m) => m.exact).filter((m, k, a2) => a2.findIndex((y) => y.exactId === m.exactId) === k);
+		const calls = (motion.waapi ?? []).filter((w) => w.node === n.i);
+		if (mine.length || calls.length) {
+			L.push('');
+			L.push('## Motion');
+			for (const m of mine) L.push(`- ${{ load: 'When the page loads', scroll: 'As it scrolls into view', idle: 'On its own', hover: 'On hover', pointer: 'As the pointer moves over it', press: 'While pressed', click: 'On click' }[m.trigger] ?? m.trigger}: ${change(m)}, ${curve(m)}.`);
+			for (const w of calls) L.push(`- Exactly as the page does it: \`el.animate(${JSON.stringify(w.keyframes)}, ${JSON.stringify(w.options)})\``);
+		}
+	}
+	L.push('');
+	L.push(`Keep every value as given. Use the class name .${cls} or one that fits your project; it sits inside its parent as the CSS says (position and offsets included).`);
+	return L.join('\n');
+}
+
+/** What the view on the page needs: each layer's picture, card rows and prompt. motion undefined = still recording. */
+export function viewOf(ctx, motion, pics) {
+	return {
+		size: ctx.size, offset: ctx.offset, clip: ctx.clip,
+		frame: ctx.structure.flatMap((n) => howOf({ ...n, paint: [] }, ctx.states, motion ?? null)).slice(0, 4),
+		layers: ctx.info.map((x0, k) => { const x = { ...x0, how: howOf(x0.n, ctx.states, motion ?? null) }; return { n: x.k, name: x.name, how: x.how, specs: specsOf(x.n, motion), prompt: layerPrompt(ctx, x, motion), css: [`${x.n.i}`, `${x.n.i}::before`, `${x.n.i}::after`].filter((q) => ctx.rules.has(q)).map((q) => `.${slugOf(x.name)}${q.replace(/^\d+/, '')} { ${ctx.rules.get(q).join('; ')} }`).join('\n'), ...(pics ? { png: pics[k].toString('base64') } : {}) }; }),
+	};
+}
+
+
+/** LESSON.md: the layers bottom to top, the build in steps, and how it moves. */
+export function lessonOf(ctx, motion, note) {
+	const { label, url, structure, states, rules } = ctx;
+	const layers = ctx.layers;
+	const info = ctx.info.map((x) => ({ ...x, how: howOf(x.n, states, motion ?? null) }));
+	const L = [];
+	L.push(`# How it is made: ${label}`);
+	L.push('');
+	if (note) { L.push(`**What you wanted to know:** ${note}`); L.push(''); }
+	L.push(`From ${url}. ${layers.length} layers, painted bottom to top. exploded.png shows them pulled apart; layers/ has each one on its own; steps/ shows how far the build should look after each step.`);
+	L.push('');
+	L.push('![exploded](exploded.png)');
+	L.push('');
+	if (structure.length) {
+		L.push('## The frame around it');
+		for (const n of structure) {
+			const how = howOf({ ...n, paint: [] }, states, motion);
+			if (how.length) L.push(`- .c${n.i} (${n.tag}): ${how.join('; ')}`);
+		}
+		L.push('');
+	}
+	L.push('## The layers');
+	for (const x of info) {
+		L.push(`### ${x.k}. ${x.name}`);
+		for (const h of x.how) L.push(`- ${h}`);
+		L.push(`- picture: layers/layer-${x.k}.png`);
+		L.push('');
+	}
+	L.push('## Build it in steps');
+	L.push('Each step adds one layer. After each, compare yours with the step picture before moving on.');
+	L.push('');
+	for (const x of info) {
+		const own = [`${x.n.i}`, `${x.n.i}::before`, `${x.n.i}::after`].filter((k) => rules.has(k));
+		L.push(`### Step ${x.k}: ${x.name}`);
+		L.push(`Should look like steps/step-${x.k}.png.`);
+		L.push('```css');
+		for (const k of own) L.push(`.c${k} { ${rules.get(k).join('; ')} }`);
+		L.push('```');
+		L.push('');
+	}
+	if (motion) { L.push(motionMarkdown(motion, { short: true }).replace('## Motion and interaction', '## How it moves')); L.push(''); }
+	L.push('## Make it yours');
+	L.push('Keep the technique, change the values: the colours of the fills and gradients, the corner radius, how deep the shadows go, the tilt, and the art itself. The structure (what sits on what, what clips what, what fades in) is what makes it work.');
+	L.push('');
+	L.push(`_Taken apart from ${url} to learn from. If you ship something made this way, use your own art, copy and colours._`);
+	const md = L.join('\n');
+	return md;
+}
+
 /** Everything for "Break it down": LESSON.md, exploded.png, steps/step-N.png. */
-export async function breakdown({ dir, file, css, states, motion = null, files = [], url, label, note }) {
+export async function breakdown({ dir, file, css, states, motion = null, files = [], url, label, note, onView = null }) {
 	const { page, close } = await launch({ width: 1600, height: 1200 });
 	try {
 		await goto(page, pathToFileURL(file).href, { settle: 2500 });
@@ -197,15 +334,19 @@ export async function breakdown({ dir, file, css, states, motion = null, files =
 			writeFileSync(path.join(dir, 'layers', `layer-${k + 1}.png`), png);
 			pics.push(png);
 		}
+		const rules = new Map();
+		for (const m of css.matchAll(/^\.c(\d+)(::(?:before|after))?\{([^}]*)\}/gm)) rules.set(`${m[1]}${m[2] ?? ''}`, cleanDecls(m[3]));
+		const info = layers.map((n, k) => ({ k: k + 1, n, name: nameOf(n, files), how: howOf(n, states, motion) }));
+		const ctx = { layers, info, rules, files, url, label, states, structure, size: a.size, offset: { x: a.clip.x - a.rootPage.x, y: a.clip.y - a.rootPage.y }, clip: { w: a.clip.width, h: a.clip.height } };
+		// the view on the page goes up now; the steps and the pictures below follow while they look at it
+		const view = viewOf(ctx, motion, pics);
+		if (onView) await onView(view).catch(() => {});
 		for (const k of layers.keys()) {
 			await iso(layers.slice(0, k + 1).map((n) => n.i));
 			await wait(60);
 			writeFileSync(path.join(dir, 'steps', `step-${k + 1}.png`), await shot(page, { ...a.clip, format: 'png' }));
 		}
 		await page.eval(`document.getElementById('sp-iso').textContent = ''`);
-		const rules = new Map();
-		for (const m of css.matchAll(/^\.c(\d+)(::(?:before|after))?\{([^}]*)\}/gm)) rules.set(`${m[1]}${m[2] ?? ''}`, cleanDecls(m[3]));
-		const info = layers.map((n, k) => ({ k: k + 1, n, name: nameOf(n, files), how: howOf(n, states, motion) }));
 		// the exploded view: the layer pictures stacked apart in 3D, numbered, with a legend
 		const ex = await launch({ width: 1600, height: 1200 });
 		try {
@@ -249,57 +390,11 @@ export async function breakdown({ dir, file, css, states, motion = null, files =
 		} finally {
 			ex.close();
 		}
-		// the lesson
-		const L = [];
-		L.push(`# How it is made: ${label}`);
-		L.push('');
-		if (note) { L.push(`**What you wanted to know:** ${note}`); L.push(''); }
-		L.push(`From ${url}. ${layers.length} layers, painted bottom to top. exploded.png shows them pulled apart; layers/ has each one on its own; steps/ shows how far the build should look after each step.`);
-		L.push('');
-		L.push('![exploded](exploded.png)');
-		L.push('');
-		if (structure.length) {
-			L.push('## The frame around it');
-			for (const n of structure) {
-				const how = howOf({ ...n, paint: [] }, states, motion);
-				if (how.length) L.push(`- .c${n.i} (${n.tag}): ${how.join('; ')}`);
-			}
-			L.push('');
-		}
-		L.push('## The layers');
-		for (const x of info) {
-			L.push(`### ${x.k}. ${x.name}`);
-			for (const h of x.how) L.push(`- ${h}`);
-			L.push(`- picture: layers/layer-${x.k}.png`);
-			L.push('');
-		}
-		L.push('## Build it in steps');
-		L.push('Each step adds one layer. After each, compare yours with the step picture before moving on.');
-		L.push('');
-		for (const x of info) {
-			const own = [`${x.n.i}`, `${x.n.i}::before`, `${x.n.i}::after`].filter((k) => rules.has(k));
-			L.push(`### Step ${x.k}: ${x.name}`);
-			L.push(`Should look like steps/step-${x.k}.png.`);
-			L.push('```css');
-			for (const k of own) L.push(`.c${k} { ${rules.get(k).join('; ')} }`);
-			L.push('```');
-			L.push('');
-		}
-		if (motion) { L.push(motionMarkdown(motion, { short: true }).replace('## Motion and interaction', '## How it moves')); L.push(''); }
-		L.push('## Make it yours');
-		L.push('Keep the technique, change the values: the colours of the fills and gradients, the corner radius, how deep the shadows go, the tilt, and the art itself. The structure (what sits on what, what clips what, what fades in) is what makes it work.');
-		L.push('');
-		L.push(`_Taken apart from ${url} to learn from. If you ship something made this way, use your own art, copy and colours._`);
-		const md = L.join('\n');
+		const md = lessonOf(ctx, motion, note);
 		writeFileSync(path.join(dir, 'LESSON.md'), md);
 		return {
 			md, exploded: readFileSync(path.join(dir, 'exploded.png')), layers: info.length, steps: info.length,
-			// for the view on the page itself: each layer's picture and where it sits against the element
-			view: {
-				size: a.size, offset: { x: a.clip.x - a.rootPage.x, y: a.clip.y - a.rootPage.y }, clip: { w: a.clip.width, h: a.clip.height },
-				frame: structure.map((n) => howOf({ ...n, paint: [] }, states, motion)).flat().slice(0, 4),
-				layers: info.map((x, k) => ({ n: x.k, name: x.name, how: x.how, png: pics[k].toString('base64') })),
-			},
+			view, ctx,
 		};
 	} finally {
 		close();

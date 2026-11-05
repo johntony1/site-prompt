@@ -176,10 +176,17 @@ try {
 	check(/1 prompt from/.test(quick.words) && /just the type/.test(quick.words), 'Get prompt in the note card sends it straight away', quick.words.split('\n')[0]);
 	// 3c. Break it down: a lesson with the exploded view instead of a copy prompt
 	const learnCall = call('site_pick', { wait: 120 });
+	const tLearn = Date.now();
+	let tView = null;
+	const watchView = (async () => { for (let k = 0; k < 600 && !tView; k++) { if (await ev('!!document.querySelector("site-prompt-view")')) tView = Date.now(); else await sleep(100); } })();
 	await sleep(200);
 	await click(await center('.cta'));
 	await click(await ui('.pop [data-a=learn]'));
 	const learn = await learnCall;
+	await watchView;
+	console.log(`      (Break it down: the 3D view was up after ${((tView - tLearn) / 1000).toFixed(1)} s; everything done after ${((Date.now() - tLearn) / 1000).toFixed(1)} s)`);
+	check(await ev(`(() => { const r = document.querySelector('site-prompt-view').shadowRoot; return !!r.querySelector('.spec [data-c=prompt]') && /Copy whole thing/.test(r.textContent); })()`), 'the view has a spec card with Copy prompt, and Copy whole thing');
+	check(await ev(`(() => { const r = document.querySelector('site-prompt-view').shadowRoot; return /Moves on hover|Motion/.test(r.querySelector('.spec').textContent) && !/recording/.test(r.querySelector('.spec').textContent); })()`), 'the motion arrives in the card when it is recorded');
 	writeFileSync(path.join(out, 'learn.txt'), learn.words);
 	check(/BREAK IT DOWN/.test(learn.words) && /# How it is made/.test(learn.words) && /## Build it in steps/.test(learn.words), 'Break it down: a lesson comes back, not a copy prompt', learn.words.split('\n')[0]);
 	check(/2 shadows stacked|one shadow/.test(learn.words) && /inset shadow draws a thin highlight/.test(learn.words), 'it says how the depth is made (shadows, the inner highlight)', learn.words.match(/.*shadow.*/g)?.slice(0, 2));

@@ -15,7 +15,7 @@ import { buildStack } from './stack.mjs';
 import * as pick from './pick.mjs';
 import { devUrl, project } from './project.mjs';
 import { fileTokens, findSource } from './place.mjs';
-import { breakdown } from './breakdown.mjs';
+import { breakdown, lessonOf, viewOf } from './breakdown.mjs';
 import { match } from './match.mjs';
 
 const VERSION = '0.1.0';
@@ -156,13 +156,21 @@ Teach it. For each pick: show the exploded view, then walk through the layers bo
 				for (const x of good) {
 					try {
 						const files = Array.isArray(x.asset) ? x.asset.map((f) => ({ src: f.src, file: f.file })) : x.asset ? [{ src: x.asset.src, file: x.asset.file }] : [];
-						const b = await breakdown({ dir: x.dir, file: x.r.file, css: x.r.code.css, states: x.r.states, motion: x.r.motion, files, url: batch.url, label: `${x.label.split(' · ')[0]}, ${new URL(batch.url).host.replace(/^www\./, '')}`, note: x.note });
-						const lesson = path.join(x.dir, 'LESSON.md');
-						out.push(text(`── ${x.n}. ${x.label}${x.note ? ` · "${x.note}"` : ''}\nLesson: ${rel(lesson)}  (link: ${link(lesson)}) · exploded view: ${link(path.join(x.dir, 'exploded.png'))} · ${b.layers} layers\n\n${b.md}`));
-						if (x === good[0] && b.view) {
-							const shown = await pick.showView(x.elPath, b.view, `${x.label.split(' · ')[0]}, ${new URL(batch.url).host.replace(/^www\./, '')}`).catch(() => false);
-							if (shown) { await pick.say('✓ Taken apart on the page. Esc puts it back'); out.push(text('It is also taken apart on the page itself, where the person picked it: the layers in 3D with a labelled panel (they can hover a layer, drag to turn it, Esc to put it back). Say so in one line.')); }
+						const title = `${x.label.split(' · ')[0]}, ${new URL(batch.url).host.replace(/^www\./, '')}`;
+						let shown = false;
+						// the first pick goes up on the page the moment its layers are photographed; the motion follows
+						const onView = x === good[0] ? async (view) => { shown = await pick.showView(x.elPath, view, title, x.md).catch(() => false); if (shown) await pick.say('Taken apart. Hover a layer, Esc puts it back'); } : null;
+						const b = await breakdown({ dir: x.dir, file: x.r.file, css: x.r.code.css, states: x.r.states, motion: x.finish ? undefined : x.r.motion, files, url: batch.url, label: title, note: x.note, onView });
+						const motion = x.finish ? await x.finish().catch(() => null) : x.r.motion;
+						if (x.finish) {
+							// the motion is in: the cards, the prompts and the lesson get it
+							writeFileSync(path.join(x.dir, 'LESSON.md'), lessonOf(b.ctx, motion, x.note));
+							b.md = lessonOf(b.ctx, motion, x.note);
+							if (shown) await pick.updateView({ all: x.md, layers: viewOf(b.ctx, motion, null).layers }).catch(() => {});
 						}
+						const lesson = path.join(x.dir, 'LESSON.md');
+						if (shown) out.push(text('It is also taken apart on the page itself, where the person picked it: white layers in 3D with a spec card per layer (fills, corners, shadows, tilt, motion) and Copy prompt for any single layer or the whole thing; hover a layer, drag to turn, Esc puts it back. Say so in one line.'));
+						out.push(text(`── ${x.n}. ${x.label}${x.note ? ` · "${x.note}"` : ''}\nLesson: ${rel(lesson)}  (link: ${link(lesson)}) · exploded view: ${link(path.join(x.dir, 'exploded.png'))} · ${b.layers} layers\n\n${b.md}`));
 						out.push(image(b.exploded, 'image/png'));
 						if (existsSync(path.join(x.dir, 'motion.png'))) out.push(image(readFileSync(path.join(x.dir, 'motion.png')), 'image/png'));
 					} catch (e) {

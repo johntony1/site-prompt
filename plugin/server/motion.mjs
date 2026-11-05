@@ -504,7 +504,7 @@ async function filmstrip({ rec, result, frames, dir }) {
 const TRIGGER = { load: 'When the page loads', scroll: 'As it scrolls into view', idle: 'On its own (while nothing happens)', hover: 'On hover', pointer: 'As the pointer moves over it', leave: 'When the pointer leaves', press: 'While pressed', click: 'On click' };
 const COMP = { x: 'x', y: 'y', z: 'z', scale: 'scale', rotate: 'rotate', rotateX: 'rotateX', rotateY: 'rotateY', v: '' };
 
-function change(m) {
+export function change(m) {
 	if (m.from === m.to) return `${kebab(m.prop)} moves and comes back`;
 	if (!m.changes?.length) return `${kebab(m.prop)} ${String(m.from).slice(0, 60)} → ${String(m.to).slice(0, 60)}`;
 	if (['backgroundColor', 'color'].includes(m.prop)) return `${kebab(m.prop)} ${m.from} → ${m.to}`;
@@ -512,7 +512,7 @@ function change(m) {
 	const base = ['transform', 'translate', 'scale', 'rotate'].includes(m.prop) ? '' : kebab(m.prop) + ' ';
 	return m.changes.map((c) => `${base}${COMP[c.c] ? COMP[c.c] + ' ' : c.c === 'v' ? '' : c.c + ' '}${fmt(c.from, UNIT[c.c] ?? (m.prop === 'opacity' || c.c === 'scale' ? '' : 'px'))} → ${fmt(c.to, UNIT[c.c] ?? (m.prop === 'opacity' || c.c === 'scale' ? '' : 'px'))}`).join(', ').replace(/^(\S+) (?=\d|-)/, '$1 ');
 }
-function curve(m) {
+export function curve(m) {
 	if (m.exact) return `${m.exact.duration != null ? `${m.exact.duration} ms` : `${m.duration} ms`}${m.exact.delay ? `, after a ${m.exact.delay} ms delay` : ''}, ${m.exact.easing ?? 'linear'} (exact, from the page's ${m.exact.via}${m.exact.iterations && m.exact.iterations !== 1 ? `, ${m.exact.iterations === Infinity || m.exact.iterations === null ? 'repeating' : `${m.exact.iterations} times`}` : ''})`;
 	if (m.spring) return `a spring: stiffness ${m.spring.stiffness}, damping ${m.spring.damping}, mass 1 (overshoots ${m.overshoot}%, settles in ${m.duration} ms; measured)`;
 	if (m.bezier) return `${m.duration} ms, cubic-bezier(${m.bezier.c.join(', ')})${m.bezier.name ? ` (${m.bezier.name})` : ''} (measured, ${fmt(m.bezier.err * 100)}% off the fitted curve)`;

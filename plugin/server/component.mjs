@@ -252,7 +252,7 @@ export async function clone(url, outDir, { selector, wait: waitS = 180, log = ()
 
 /** Snapshot the element at `sel` on an open page (any tab, the person's own included), with its states, fonts and
  *  keyframes, into outDir/component.html; then render that alone and score it against the original. */
-export async function extract(page, sel, outDir, url, { log = () => {}, own = false } = {}) {
+export async function extract(page, sel, outDir, url, { log = () => {}, own = false, check = true } = {}) {
 	mkdirSync(outDir, { recursive: true });
 	{
 		await page.eval(`document.querySelector(${JSON.stringify(sel)})?.scrollIntoView({ block: 'nearest', inline: 'nearest' })`).catch(() => {});
@@ -325,6 +325,8 @@ ${snap.html}
 		const file = path.join(outDir, 'component.html');
 		writeFileSync(file, html);
 		await page.eval(`(() => { document.querySelectorAll('[data-sp-n]').forEach((e) => e.removeAttribute('data-sp-n')); delete window.__spBase; })()`).catch(() => {});
+		const code = { html: snap.html, css: [...remoteFaces, ...frames, ...snap.rules, ...stateRules].join('\n'), fonts: css.families.filter((f) => snap.families.includes(f.family)).map((f) => ({ ...f, sources: [...new Set(remoteFaces.filter((x) => x.includes(f.family)).sort((a, b) => /U\+0-/i.test(b) - /U\+0-/i.test(a)).flatMap((x) => [...x.matchAll(/url\("?([^")]+)"?\)/g)].map((m) => m[1])))].concat(f.sources).filter((u, k, a) => a.indexOf(u) === k) })) };
+		if (!check) return { file, outDir, snap, states, stateRules, code, faces: faces.length, keyframes: frames.length, ssim: null, diff: null, size: { original: [clip.width, clip.height], clone: [clip.width, clip.height], ok: true }, sheet: null, offset: null, unchecked: true };
 		// proof: render the snapshot alone and score it against the original element
 		log('checking the clone');
 		const chk = await launch({ width: Math.max(400, clip.width + 96), height: Math.max(300, clip.height + 96) });
@@ -348,7 +350,6 @@ ${snap.html}
 			for (const t of tries) { const sc = await alignedScore(chk.page, restPng, t, P); if (!score || sc.diff < score.diff) score = sc; }
 			const ssim = score.ssim;
 			const sizeOk = Math.abs(b.width - clip.width) <= 2 && Math.abs(b.height - clip.height) <= 2;
-			const code = { html: snap.html, css: [...remoteFaces, ...frames, ...snap.rules, ...stateRules].join('\n'), fonts: css.families.filter((f) => snap.families.includes(f.family)).map((f) => ({ ...f, sources: [...new Set(remoteFaces.filter((x) => x.includes(f.family)).sort((a, b) => /U\+0-/i.test(b) - /U\+0-/i.test(a)).flatMap((x) => [...x.matchAll(/url\("?([^")]+)"?\)/g)].map((m) => m[1])))].concat(f.sources).filter((u, k, a) => a.indexOf(u) === k) })) };
 			return { file, outDir, snap, states, stateRules, code, faces: faces.length, keyframes: frames.length, ssim, diff: score.diff, size: { original: [clip.width, clip.height], clone: [Math.round(b.width), Math.round(b.height)], ok: sizeOk }, sheet: Buffer.from(score.sheet.split(',')[1], 'base64'), offset: score.offset };
 		} finally {
 			chk.close();
