@@ -143,7 +143,8 @@ function howOf(n, states, motion = null) {
 	}
 	const hoverKeys = Object.values(states ?? {}).flatMap((s) => Object.entries(s.hover ?? {})).filter(([j]) => +String(j).split('::')[0] === n.i);
 	const WHEN = { load: 'as the page loads', scroll: 'as it scrolls into view', idle: 'on a timer, on its own', hover: 'on hover', pointer: 'as the pointer moves over it', press: 'when pressed', click: 'on click' };
-	const mine = (motion?.motions ?? []).filter((m) => m.node === n.i && m.frames > 1 && m.trigger !== 'leave');
+	let mine = (motion?.motions ?? []).filter((m) => m.node === n.i && m.frames > 1 && m.trigger !== 'leave');
+	if (mine.some((m) => m.exact)) mine = mine.filter((m) => m.exact).filter((m, k, a) => a.findIndex((x) => x.exactId === m.exactId) === k); // the page's own animation, once
 	const loop = (motion?.loops ?? []).find((l) => l.node === n.i);
 	if (n.fx.opacity === '0') {
 		const m = mine.find((x) => x.prop === 'opacity') ?? mine[0];

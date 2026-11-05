@@ -252,7 +252,7 @@ export function analyse(rec, exact) {
 				const size = (c) => Math.max(Math.abs(b[c] - a[c]), ph.label === 'pointer' ? range(c) : 0) / (SCALE[c] ?? 1);
 				const pick = comps.sort((c1, c2) => size(c2) - size(c1))[0];
 				seg.changes = comps.map((c) => ({ c, from: a[c], to: b[c] }));
-				if (pick && s.end - s.start >= 2 && Math.abs(b[pick] - a[pick]) > (SCALE[pick] ?? 1) * 0.01) {
+				if (pick && s.end - s.start >= 3 && Math.abs(b[pick] - a[pick]) > (SCALE[pick] ?? 1) * 0.01) {
 					const samples = parsed.slice(s.start - 1, s.end + 1).filter((x) => x[1] && x[1][pick] != null).map(([t, p]) => [t, p]);
 					const pr = progress(samples, pick, a[pick], b[pick], startT, endT - startT);
 					const over = Math.max(...pr.map((x) => x[2])), under = Math.min(...pr.map((x) => x[2]));
