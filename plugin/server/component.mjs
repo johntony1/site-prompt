@@ -57,7 +57,7 @@ function picker() {
 }
 
 /** In the page: snapshot the subtree of [data-sp-picked] (computed styles minus defaults), remember the base look. */
-function snapshot(sel) {
+export function snapshot(sel) {
 	const root = document.querySelector(sel || '[data-sp-picked]');
 	if (!root) return null;
 	const frame = document.createElement('iframe');

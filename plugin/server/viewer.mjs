@@ -16,6 +16,15 @@ export function viewer() {
 	const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 	const n = V.layers.length;
 	const pad2 = (k) => String(k).padStart(2, '0');
+	// slabs in the pick's own colour: dark sites get dark slabs, light ones light
+	function slabVars(bg) {
+		const m = String(bg ?? '').match(/\d+(\.\d+)?/g)?.map(Number);
+		if (!m || m.length < 3) return '';
+		const lum = (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255;
+		if (lum > 0.5) return `--slab:${bg};--slabline:#d4d4d8;--edge:#c9c9cf;--edgeline:#a1a1aa`;
+		const up = (k) => `rgb(${m.slice(0, 3).map((x) => Math.round(x + (255 - x) * k)).join(',')})`;
+		return `--slab:${up(0.04)};--slabline:rgba(255,255,255,.16);--edge:${up(0.0)};--edgeline:rgba(255,255,255,.10)`;
+	}
 	root.innerHTML = `<style>
 		:host{all:initial}
 		*{box-sizing:border-box;margin:0;font-family:"Inter Variable",Inter,ui-sans-serif,-apple-system,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:-.006em}
@@ -30,7 +39,7 @@ export function viewer() {
 		.plane .slab,.plane .edge{position:absolute;inset:0;border-radius:inherit;transition:box-shadow .25s ease,background-color .25s ease,opacity .4s ease;opacity:0}
 		.on .plane .slab,.on .plane .edge{opacity:1}
 		.plane .slab{background:var(--slab);box-shadow:0 0 0 1px var(--slabline),0 1px 0 #fff inset}
-		.plane .edge{transform:translateZ(-7px);background:#c9c9cf;box-shadow:0 0 0 1px #a1a1aa,0 30px 50px -20px rgba(0,0,0,.6)}
+		.plane .edge{transform:translateZ(-7px);background:var(--edge,#c9c9cf);box-shadow:0 0 0 1px var(--edgeline,#a1a1aa),0 30px 50px -20px rgba(0,0,0,.6)}
 		.plane img{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;transform:translateZ(.5px)}
 		.plane .tag{position:absolute;left:10px;top:10px;height:20px;padding:0 7px;border-radius:6px;background:#fff;color:#71717a;font:600 10.5px/20px var(--mono);box-shadow:0 0 0 1px #d4d4d8;opacity:0;transform:translateZ(1px);transition:opacity .3s ease}
 		.on .plane .tag{opacity:1}
@@ -85,10 +94,14 @@ export function viewer() {
 		.bar input{width:110px;accent-color:#3d7bff}
 		.bar .sep{width:1px;height:18px;background:var(--line);margin:0 2px}
 		.bar kbd{font:500 10.5px/1 var(--mono);color:var(--muted);padding:3px 5px;border-radius:4px;box-shadow:inset 0 0 0 1px var(--line)}
+		.copy{position:absolute;left:0;top:0;transform:translateZ(.5px);pointer-events:none}
+		.copy *,.copy *::before,.copy *::after{transition:none!important;animation:none!important}
+		${V.html ? (V.rules ?? []).join('\n') : ''}
+		${V.html ? V.layers.map((l, k) => `.p${k} *{visibility:hidden!important}${(l.members ?? [l.i]).map((m) => `.p${k} .c${m}`).join(',')}{visibility:visible!important}${l.force ? `.p${k} .c${l.i}{opacity:1!important}` : ''}`).join('\n') : ''}
 	</style>
-	<div class="v">
+	<div class="v" style="${slabVars(V.bg)}">
 		<div class="canvas"></div>
-		<div class="stage"><div class="stack">${V.layers.map((l, k) => `<div class="plane" data-k="${k}"><div class="edge"></div><div class="slab"></div>${l.png ? `<img src="data:image/png;base64,${l.png}">` : ''}<span class="tag">${pad2(l.n)}</span><i class="pin l"></i><i class="pin r"></i></div>`).join('')}</div></div>
+		<div class="stage"><div class="stack">${V.layers.map((l, k) => `<div class="plane" data-k="${k}"><div class="edge"></div><div class="slab"></div>${V.html ? `<div class="copy p${k}">${V.html}</div>` : l.png ? `<img src="data:image/png;base64,${l.png}">` : ''}<span class="tag">${pad2(l.n)}</span><i class="pin l"></i><i class="pin r"></i></div>`).join('')}</div></div>
 		<svg class="lines"><path class="lab" d=""/><circle class="lab" r="3" cx="-9" cy="-9"/><path class="card" d=""/><circle class="card" r="3" cx="-9" cy="-9"/></svg>
 		<div class="head"><small>Breakdown</small><h2>${esc(V.title)}</h2><p>${n} layers · hover one to inspect · drag to turn</p></div>
 		<div class="labels">${V.layers.slice().reverse().map((l) => `<div class="label" data-k="${l.n - 1}"><b>${pad2(l.n)}</b>${esc(l.name.replace(/ \(layer-\d+\.\w+\)/, ''))}</div>`).join('')}</div>
@@ -102,7 +115,7 @@ export function viewer() {
 	const [labPath, labDot, cardPath, cardDot] = [...root.querySelectorAll('svg.lines > *')];
 	// each slab hugs what its layer draws: the bounding box of the picture's visible pixels
 	planes.forEach((p) => {
-		const img = p.querySelector('img');
+		const img = V.html ? null : p.querySelector(':scope > img');
 		if (!img) return;
 		const fit = () => {
 			const w = img.naturalWidth, h = img.naturalHeight;
@@ -123,7 +136,7 @@ export function viewer() {
 		p.__fit = fit;
 	});
 	// where the element is right now: the stack starts exactly over it, and the element itself lifts off
-	const el = V.path && document.querySelector(V.path);
+	const el = V.el ?? (V.path && document.querySelector(V.path));
 	let r = el?.getBoundingClientRect();
 	if (!r || !r.width || r.bottom < 0 || r.top > innerHeight) { el?.scrollIntoView({ block: 'center' }); r = el?.getBoundingClientRect() ?? { left: (innerWidth - V.size.w) / 2, top: (innerHeight - V.size.h) / 2, width: V.size.w, height: V.size.h }; }
 	const was = el ? el.style.visibility : '';
@@ -150,8 +163,17 @@ export function viewer() {
 		ty += (S.t + S.b) / 2 - (oy + (cy - oy) * k);
 		apply();
 	};
+	if (V.html) planes.forEach((p, k) => {
+		const b = V.layers[k].box, P = 10;
+		const box = { left: b.x - P + 'px', top: b.y - P + 'px', width: b.w + P * 2 + 'px', height: b.h + P * 2 + 'px' };
+		for (const e of p.querySelectorAll('.slab, .edge')) Object.assign(e.style, { inset: 'auto', ...box });
+		const tag = p.querySelector('.tag'); tag.style.left = b.x - P + 10 + 'px'; tag.style.top = b.y - P + 10 + 'px';
+		const L = p.querySelector('.pin.l'), R = p.querySelector('.pin.r');
+		Object.assign(L.style, { left: b.x - P + 'px', top: b.y + b.h / 2 + 'px' });
+		Object.assign(R.style, { left: b.x + b.w + P + 'px', right: 'auto', top: b.y + b.h / 2 + 'px' });
+	});
 	// the pictures decode first, the slabs take their shape, then it lifts off
-	const ready = Promise.all(planes.map((p) => { const img = p.querySelector('img'); return img ? img.decode().then(() => p.__fit?.()).catch(() => {}) : null; }));
+	const ready = Promise.all(planes.map((p) => { const img = V.html ? null : p.querySelector(':scope > img'); return img ? img.decode().then(() => p.__fit?.()).catch(() => {}) : null; }));
 	ready.then(() => {
 		// lift off: flat over the element, then turn and split. Where it ends up is measured first, with transitions off.
 		const all = [stack, ...planes];
@@ -191,9 +213,9 @@ export function viewer() {
 		const l = V.layers[k];
 		card.innerHTML = `<div class="ch"><i>${pad2(l.n)}</i><b>${esc(l.name)}</b></div>
 			<div class="rows">${l.specs.map((row) => `<div class="row${/recording/.test(row.v) ? ' wait' : ''}"><span>${esc(row.k)}</span><em>${swatch(row)}<u title="${esc(row.v)}">${esc(row.v)}</u></em></div>`).join('')}</div>
-			<div class="acts"><button class="b p" data-c="prompt">Copy prompt</button><button class="b" data-c="css">Copy CSS</button></div>`;
-		card.querySelector('[data-c=prompt]').addEventListener('click', (e) => copy(V.layers[k].prompt, e.currentTarget, 'Copy prompt'));
-		card.querySelector('[data-c=css]').addEventListener('click', (e) => copy(V.layers[k].css || '/* no styles of its own */', e.currentTarget, 'Copy CSS'));
+			<div class="acts"><button class="b p" data-c="prompt" ${l.prompt ? '' : 'disabled style="opacity:.55"'}>${l.prompt ? 'Copy prompt' : 'Writing prompt…'}</button><button class="b" data-c="css" ${l.css ? '' : 'disabled style="opacity:.55"'}>Copy CSS</button></div>`;
+		card.querySelector('[data-c=prompt]').addEventListener('click', (e) => V.layers[k].prompt && copy(V.layers[k].prompt, e.currentTarget, 'Copy prompt'));
+		card.querySelector('[data-c=css]').addEventListener('click', (e) => V.layers[k].css && copy(V.layers[k].css, e.currentTarget, 'Copy CSS'));
 	};
 	const lines = () => {
 		if (hot == null) { labPath.setAttribute('d', ''); cardPath.setAttribute('d', ''); labDot.setAttribute('cx', -9); cardDot.setAttribute('cx', -9); return; }
@@ -239,7 +261,7 @@ export function viewer() {
 	range.addEventListener('input', () => { spread = range.value / 100; flat = false; apply(); });
 	const flatBtn = $('[data-a=flat]');
 	flatBtn.addEventListener('click', () => { flat = !flat; flatBtn.textContent = flat ? 'Spread out' : 'Flatten'; apply(); });
-	$('[data-a=all]').addEventListener('click', (e) => copy(V.all || V.layers.map((l) => l.prompt).join('\n\n---\n\n'), e.currentTarget, 'Copy whole thing'));
+	$('[data-a=all]').addEventListener('click', (e) => { const t = V.all || V.layers.map((l) => l.prompt).filter(Boolean).join('\n\n---\n\n'); if (t) copy(t, e.currentTarget, 'Copy whole thing'); else { e.currentTarget.textContent = 'Writing prompt…'; setTimeout(() => (e.currentTarget.textContent = 'Copy whole thing'), 1400); } });
 	const loop = () => { if (!host.isConnected) return; lines(); requestAnimationFrame(loop); };
 	requestAnimationFrame(loop);
 	// when the motion arrives: new card rows and prompts, in place
@@ -262,4 +284,35 @@ export function viewer() {
 	addEventListener('keydown', onKey, true);
 	$('[data-a=close]').addEventListener('click', close);
 	window.__spViewClose = close;
+}
+
+/**
+ * In the page, the moment Break it down is pressed: the pick exactly as it is on screen now (read-only), grouped into
+ * layers, and the view opened on it. Returns what the server needs to build the lesson from the same picture.
+ */
+export function instant(el, title) {
+	const K = window.__spKit;
+	if (!K || !window.__spSnap || !el) return null;
+	el.setAttribute('data-sp-picked', '1');
+	let snap = null;
+	try { snap = window.__spSnap('[data-sp-picked]'); } finally { el.removeAttribute('data-sp-picked'); }
+	if (!snap) return null;
+	const a = K.anatomyOf(el, (e) => { const v = e.getAttribute('data-sp-n'); return v == null ? null : +v; });
+	const groups = K.groupLayers(a.nodes, []);
+	const fonts = [];
+	for (const sh of document.styleSheets) {
+		let rules = null;
+		try { rules = sh.cssRules; } catch { continue; }
+		for (const r of rules) if (r.constructor.name === 'CSSFontFaceRule' && snap.families.some((f) => r.cssText.includes(f))) fonts.push(r.cssText.replace(/url\(["']?([^"')]+)["']?\)/g, (m, u) => { try { return `url("${new URL(u, sh.href || location.href).href}")`; } catch { return m; } }));
+	}
+	document.querySelectorAll('[data-sp-n]').forEach((e) => e.removeAttribute('data-sp-n'));
+	let bg = null;
+	for (let x = el; x && !bg; x = x.parentElement) { const c = getComputedStyle(x).backgroundColor; if (c && c !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(c)) bg = c; }
+	bg ??= '#ffffff';
+	const r = el.getBoundingClientRect();
+	const layers = groups.map((g, k) => ({ n: k + 1, i: g.i, sub: g.sub, members: g.members, name: g.name, box: g.box, force: g.n.fx.opacity === '0', specs: K.groupSpecs({ ...g.n, sub: g.sub, members: g.members }, undefined) }));
+	const V = { el, title, html: snap.html, rules: snap.rules, bg, size: { w: r.width, h: r.height }, offset: { x: 0, y: 0 }, clip: { w: r.width, h: r.height }, layers };
+	window.__spView = V;
+	window.__spViewer();
+	return { html: snap.html, rules: snap.rules, fonts: [...new Set(fonts)], bg, size: V.size, layers: layers.map(({ specs, ...l }) => l) };
 }

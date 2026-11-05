@@ -170,6 +170,9 @@ export function overlay() {
 		const send = (a) => {
 			closePop();
 			if (!picks.length) return;
+			// Break it down: taken apart right here, at once, from what is on screen; the agent builds the lesson after
+			let inst = null;
+			if (a === 'learn') { const p0 = picks.find((p) => document.contains(p.el)); try { inst = p0 && window.__spInstant?.(p0.el, `${NAME[p0.kind]}, ${location.host.replace(/^www\./, '')}`); if (inst) inst.n = p0.n; } catch (e) { inst = null; } }
 			const batch = picks.filter((p) => document.contains(p.el)).map((p) => ({ n: p.n, kind: p.kind, label: p.label, note: p.note }));
 			picks.length = 0;
 			redraw();
@@ -177,7 +180,7 @@ export function overlay() {
 			status.hidden = false;
 			status.classList.remove('ok');
 			bar.classList.add('busy');
-			window.__spSend?.(JSON.stringify({ url: location.href, title: document.title, picks: batch, action: a === 'add' ? 'add' : a === 'learn' ? 'learn' : 'prompt', style }));
+			window.__spSend?.(JSON.stringify({ url: location.href, title: document.title, picks: batch, action: a === 'add' ? 'add' : a === 'learn' ? 'learn' : 'prompt', style, instant: inst }));
 		};
 		root.addEventListener('click', (e) => {
 			const badge = e.target.closest('.badge');

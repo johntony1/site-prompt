@@ -16,8 +16,12 @@ import { project } from './project.mjs';
 import { placer, tokens } from './place.mjs';
 import { ICONS, THEME } from './theme.mjs';
 import { motionMarkdown, recordMotion } from './motion.mjs';
-import { viewer } from './viewer.mjs';
+import { instant, viewer } from './viewer.mjs';
+import { snapshot } from './component.mjs';
+import { spKit } from './kit.mjs';
 const LOOK = `window.__spTheme = ${JSON.stringify(THEME)}; window.__spIcons = ${JSON.stringify(ICONS)};`;
+// what Break it down needs in the page to take a pick apart on the spot
+const KIT = `window.__spKit = (${spKit.toString()})(); window.__spSnap = ${snapshot.toString()}; window.__spViewer = ${viewer.toString()}; window.__spInstant = ${instant.toString()};`;
 
 let session = null; // { page, close, own, url, queue, waiter }
 
@@ -43,7 +47,7 @@ export async function open(url, { mode = 'auto', log = () => {} } = {}) {
 	});
 	// building a project? the toolbar offers to add picks straight to it
 	const proj = project();
-	const src = `${LOOK} window.__spProject = ${JSON.stringify(proj ? { name: proj.name } : null)}; (${overlay.toString()})()`;
+	const src = `${LOOK} ${KIT} window.__spProject = ${JSON.stringify(proj ? { name: proj.name } : null)}; (${overlay.toString()})()`;
 	await s.page.send('Page.addScriptToEvaluateOnNewDocument', { source: src });
 	await s.page.eval(src);
 	s.page.router?.on?.('close', () => { if (session === s) session = null; });
@@ -148,9 +152,19 @@ export async function processBatch(batch, baseDir, { log = () => {} } = {}) {
 			const motionRun = elPath ? recordMotion({ url: batch.url, elPath, dir, safeClick, log }).catch(() => null) : Promise.resolve(null);
 			try {
 				let r = null;
-				const c = elPath ? await copyPage().catch(() => null) : null;
-				const inCopy = c && await c.page.eval(`(() => { const e = document.querySelector(${JSON.stringify(elPath)}); if (!e) return false; const r = e.getBoundingClientRect(); if (!r.width || !r.height) return false; document.querySelectorAll('[data-sp-copy]').forEach((x) => x.removeAttribute('data-sp-copy')); e.setAttribute('data-sp-copy', '1'); e.scrollIntoView({ block: 'center' }); return true; })()`).catch(() => false);
-				if (inCopy) {
+				const inst = quick && batch.instant && batch.instant.n === p.n ? batch.instant : null;
+				if (inst) {
+					// taken apart in the page already: the copy is that snapshot, exactly what they saw
+					const file = path.join(dir, 'component.html');
+					writeFileSync(file, `<!doctype html>\n<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">\n<title>${p.kind} from ${host}</title>\n<!-- Taken by site-prompt from ${batch.url} as it was on screen: every computed style that differs from the browser default. -->\n<style>\n${inst.fonts.join('\n')}\nhtml,body{margin:0}\nbody{min-height:100vh;display:grid;place-items:center;background:${inst.bg};padding:24px;box-sizing:border-box}\n${inst.rules.join('\n')}\n</style></head>\n<body>\n${inst.html}\n</body></html>\n`);
+					const W = Math.round(inst.size.w), H = Math.round(inst.size.h);
+					r = { file, outDir: dir, where: 'page', snap: { nodes: (inst.html.match(/class="c\d+/g) ?? []).length, tag: d.tag, text: d.text }, states: {}, stateRules: [], code: { html: inst.html, css: [...inst.fonts, ...inst.rules].join('\n'), fonts: [] }, faces: inst.fonts.length, keyframes: 0, ssim: null, diff: null, size: { original: [W, H], clone: [W, H], ok: true }, sheet: null, unchecked: true, mobile: null };
+				}
+				const c = !r && elPath ? await copyPage().catch(() => null) : null;
+				const inCopy = !r && c && await c.page.eval(`(() => { const e = document.querySelector(${JSON.stringify(elPath)}); if (!e) return false; const r = e.getBoundingClientRect(); if (!r.width || !r.height) return false; document.querySelectorAll('[data-sp-copy]').forEach((x) => x.removeAttribute('data-sp-copy')); e.setAttribute('data-sp-copy', '1'); e.scrollIntoView({ block: 'center' }); return true; })()`).catch(() => false);
+				if (r) {
+					// done above
+				} else if (inCopy) {
 					await wait(400);
 					await settled(c.page, '[data-sp-copy]');
 					r = await extract(c.page, '[data-sp-copy]', dir, batch.url, { own: false, log, check: !quick });

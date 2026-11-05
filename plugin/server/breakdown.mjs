@@ -7,98 +7,18 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { goto, launch, shot, wait } from './chrome.mjs';
 import { change, curve, motionMarkdown } from './motion.mjs';
+import { spKit } from './kit.mjs';
 
-/** In the copy: every element that paints something, with what it paints and the effects on it. */
+const K = spKit();
+const { nameOf, specsOf, fileName, deg, blurOf, colorOf, slugOf, groupLayers, groupSpecs } = K;
+
+/** In the copy: every element that paints something (the kit is put on the page first). */
 function anatomy() {
-	const root = document.querySelector('.c0');
-	if (!root) return null;
-	const R = root.getBoundingClientRect();
-	const clear = (c) => !c || c === 'transparent' || /rgba\([^)]*,\s*0\)$/.test(c);
-	const shadows = (v) => (v && v !== 'none' ? v.split(/,(?![^(]*\))/).map((s) => s.trim()).filter((s) => !/^rgba\([^)]*,\s*0\)/.test(s)) : []);
-	const paintOf = (cs, el, pseudo) => {
-		const p = [];
-		if (!clear(cs.backgroundColor)) p.push({ k: 'fill', v: cs.backgroundColor });
-		if (cs.backgroundImage !== 'none') p.push({ k: /url\(/.test(cs.backgroundImage) ? 'image' : 'gradient', v: cs.backgroundImage });
-		const bw = ['Top', 'Right', 'Bottom', 'Left'].map((s) => parseFloat(cs[`border${s}Width`]) || 0);
-		if (bw.some((w) => w > 0) && !clear(cs.borderTopColor)) p.push({ k: 'border', v: `${Math.max(...bw)}px ${cs.borderTopStyle} ${cs.borderTopColor}` });
-		const sh = shadows(cs.boxShadow);
-		if (sh.length) p.push({ k: 'shadow', v: sh });
-		if (!pseudo && el) {
-			const own = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent.trim()).join(' ').trim();
-			if (own) p.push({ k: 'text', v: own.slice(0, 80) });
-			const t = el.tagName.toLowerCase();
-			if (/^(img|svg|video|canvas|picture)$/.test(t)) p.push({ k: 'media', v: t === 'img' ? el.currentSrc || el.src : t });
-		}
-		if (cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0) p.push({ k: 'outline', v: `${cs.outlineWidth} ${cs.outlineStyle} ${cs.outlineColor}` });
-		return p;
-	};
-	const fxOf = (cs, el, pseudo = false) => {
-		const f = {};
-		if (cs.opacity !== '1') f.opacity = cs.opacity;
-		if (cs.transform !== 'none') f.transform = cs.transform;
-		if (cs.maskImage && cs.maskImage !== 'none') f.mask = cs.maskImage;
-		if (cs.filter !== 'none') f.filter = cs.filter;
-		if (cs.backdropFilter && cs.backdropFilter !== 'none') f.backdrop = cs.backdropFilter;
-		if (cs.mixBlendMode !== 'normal') f.blend = cs.mixBlendMode;
-		if (cs.perspective !== 'none') f.perspective = cs.perspective;
-		if (cs.overflow !== 'visible' && parseFloat(cs.borderTopLeftRadius) > 0) f.clip = cs.borderTopLeftRadius;
-		else if (cs.overflow !== 'visible') f.clip = '0px';
-		if (parseFloat(cs.borderTopLeftRadius) > 0) f.radius = cs.borderTopLeftRadius;
-		if ((cs.position === 'absolute' || cs.position === 'fixed') && pseudo) {
-			const bleed = Math.max(...['top', 'right', 'bottom', 'left'].map((k) => -(parseFloat(cs[k]) || 0)));
-			if (bleed > 1) f.bleed = Math.round(bleed);
-		} else if (cs.position === 'absolute' || cs.position === 'fixed') {
-			const r = el.getBoundingClientRect(), pr = el.parentElement.getBoundingClientRect();
-			const bleed = Math.max(pr.left - r.left, r.right - pr.right, pr.top - r.top, r.bottom - pr.bottom);
-			if (bleed > 1) f.bleed = Math.round(bleed);
-		}
-		if (cs.transitionDuration && cs.transitionDuration !== '0s') f.transition = { props: cs.transitionProperty, dur: cs.transitionDuration, ease: cs.transitionTimingFunction };
-		if (cs.animationName && cs.animationName !== 'none') f.animation = `${cs.animationName} ${cs.animationDuration} ${cs.animationTimingFunction} ${cs.animationIterationCount}`;
-		return f;
-	};
-	const nodes = [root, ...root.querySelectorAll('*')].filter((e) => /\bc\d+\b/.test(e.getAttribute('class') || ''));
-	let lo = { x: R.left, y: R.top, r: R.right, b: R.bottom };
-	const out = nodes.map((el) => {
-		const i = +el.getAttribute('class').match(/\bc(\d+)\b/)[1];
-		const cs = getComputedStyle(el), r = el.getBoundingClientRect();
-		lo = { x: Math.min(lo.x, r.left), y: Math.min(lo.y, r.top), r: Math.max(lo.r, r.right), b: Math.max(lo.b, r.bottom) };
-		const pseudos = {};
-		for (const ps of ['::before', '::after']) {
-			const pc = getComputedStyle(el, ps);
-			if (!pc.content || pc.content === 'none' || pc.content === 'normal') continue;
-			pseudos[ps] = { paint: paintOf(pc, null, true), fx: fxOf(pc, el, true) };
-		}
-		let depth = 0;
-		for (let x = el; x !== root; x = x.parentElement) depth++;
-		return {
-			i, tag: el.tagName.toLowerCase(), depth, alt: el.getAttribute('alt') || '',
-			box: { x: Math.round(r.left - R.left), y: Math.round(r.top - R.top), w: Math.round(r.width), h: Math.round(r.height) },
-			paint: paintOf(cs, el, false), fx: fxOf(cs, el), pseudos,
-		};
-	});
-	const pad = 48;
-	return { nodes: out, rootPage: { x: R.left + scrollX, y: R.top + scrollY }, size: { w: Math.round(R.width), h: Math.round(R.height) }, clip: { x: Math.floor(lo.x) - pad + scrollX, y: Math.floor(lo.y) - pad + scrollY, width: Math.ceil(lo.r - lo.x) + pad * 2, height: Math.ceil(lo.b - lo.y) + pad * 2 } };
+	return window.__spKit.anatomyOf(document.querySelector('.c0'), (e) => { const m = (e.getAttribute('class') || '').match(/\bc(\d+)\b/); return m ? +m[1] : null; });
 }
 
-const fileName = (u) => { try { return decodeURIComponent(new URL(u).pathname.split('/').pop()).replace(/-[0-9a-f]{12,}/i, '').replace(/\.\w+$/, ''); } catch { return ''; } };
-const deg = (m) => { const v = m.match(/matrix\(([^)]+)\)/)?.[1].split(',').map(Number); return v ? Math.round(Math.atan2(v[1], v[0]) * 1800 / Math.PI) / 10 : null; };
-const blurOf = (s) => { const n = s.replace(/rgba?\([^)]*\)|#\w+/g, '').trim().split(/\s+/).map(parseFloat); return n[2] || 0; };
 
-/** A short name for a layer, from what it paints. */
-function nameOf(n, files) {
-	const media = n.paint.find((p) => p.k === 'media');
-	if (media) {
-		const f = files.find((x) => x.src === media.v);
-		return `${n.alt || fileName(media.v) || n.tag}${f ? ` (${f.file})` : ''}`;
-	}
-	const text = n.paint.find((p) => p.k === 'text');
-	if (text) return `Text "${text.v.slice(0, 40)}"`;
-	const pp = Object.entries(n.pseudos).filter(([, v]) => v.paint.length);
-	const all = [...n.paint, ...pp.flatMap(([, v]) => v.paint)];
-	const kinds = new Set(all.map((p) => p.k));
-	const word = n.fx.opacity === '0' && kinds.has('gradient') ? 'Sheen' : /0\.\d|1\)/.test(n.fx.transform ?? '') && kinds.has('gradient') && n.paint.some((p) => /255, 255, 255/.test(p.v)) ? 'Sheen' : kinds.has('shadow') && n.fx.clip ? 'Clipping frame' : kinds.has('shadow') && kinds.size === 1 ? 'Shadow plate' : kinds.has('gradient') ? 'Gradient surface' : kinds.has('fill') ? 'Surface' : kinds.has('border') ? 'Outline' : 'Layer';
-	return `${word}${pp.length && !n.paint.length ? ` (${pp.map(([k]) => k).join(', ')})` : ''}`;
-}
+
 
 /** How a layer is made, in plain words, from its paint and effects. */
 function howOf(n, states, motion = null) {
@@ -174,56 +94,26 @@ export function cleanDecls(rule) {
 	return d.filter((x) => !NOISE.test(x));
 }
 
-const slugOf = (t) => String(t).toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) || 'layer';
-const colorOf = (g) => (g.match(/rgba?\([^)]*\)|#[0-9a-f]{3,8}/gi) ?? []);
 
-/** The spec rows of a layer's card: what it is made of, in the words a designer would use. */
-export function specsOf(n, motion) {
-	const rows = [];
-	const add = (k, v, sw) => rows.push(sw ? { k, v, sw } : { k, v });
-	add('Size', `${n.box.w} × ${n.box.h}`);
-	const paints = [...n.paint.map((p) => ({ ...p, ps: '' })), ...Object.entries(n.pseudos).flatMap(([ps, v]) => v.paint.map((p) => ({ ...p, ps })))];
-	for (const p of paints) {
-		const via = p.ps ? ` (${p.ps})` : '';
-		if (p.k === 'fill') add(`Fill${via}`, p.v.replace(/\s+/g, ''), p.v);
-		if (p.k === 'gradient') add(`Gradient${via}`, `${/radial/.test(p.v) ? 'radial' : /conic/.test(p.v) ? 'conic' : 'linear'}, ${colorOf(p.v).length} stops`, p.v);
-		if (p.k === 'border') add(`Stroke${via}`, p.v.replace(/ solid/, ''), p.v.match(/rgba?\([^)]*\)/)?.[0]);
-		if (p.k === 'shadow') {
-			const inner = p.v.filter((x) => /inset/.test(x)), outer = p.v.filter((x) => !/inset/.test(x));
-			if (outer.length) add(`Shadow${via}`, `${outer.length > 1 ? `${outer.length} stacked, ` : ''}blur ${outer.map(blurOf).join(' / ')}px`);
-			if (inner.length) add(`Inner edge${via}`, `${inner.length} inset`);
-		}
-		if (p.k === 'media') add('Art', /\.svg/i.test(p.v) || p.v === 'svg' ? 'SVG, vector' : 'image');
-		if (p.k === 'text') add('Text', `"${p.v.slice(0, 28)}"`);
+
+/** A layer's own CSS under a real name; a group's with everything it holds (named after it, numbered). */
+function cssFor(ctx, x) {
+	const n = x.n, cls = slugOf(x.name);
+	const ids = [n.i, ...(n.sub ? (n.members ?? []).filter((i) => i !== n.i) : [])];
+	const out = [];
+	for (const id of ids) for (const k of [`${id}`, `${id}::before`, `${id}::after`]) {
+		if (!ctx.rules.has(k)) continue;
+		const name = id === n.i ? cls : `${cls}-part-${id}`;
+		out.push(`.${name}${k.replace(/^\d+/, '')} { ${ctx.rules.get(k).join('; ')} }`);
 	}
-	const fx = { ...n.fx, ...Object.values(n.pseudos).reduce((o, v) => ({ ...v.fx, ...o }), {}) };
-	if (fx.radius) add('Corner radius', fx.radius);
-	if (fx.clip) add('Clips content', 'yes, to its corners');
-	if (fx.opacity && fx.opacity !== '1') add('Opacity at rest', fx.opacity);
-	if (fx.transform) { const d = deg(fx.transform); if (d) add('Tilt', `${d}°`); }
-	if (fx.bleed) add('Overhangs', `${fx.bleed}px past its box`);
-	if (fx.mask) add('Mask', /linear-gradient/.test(fx.mask) ? 'gradient fade' : 'shape');
-	if (fx.perspective) add('Perspective', fx.perspective);
-	if (fx.backdrop) add('Backdrop', fx.backdrop);
-	if (fx.filter) add('Filter', fx.filter);
-	const WHEN = { load: 'on load', scroll: 'on scroll into view', idle: 'on its own', hover: 'on hover', pointer: 'follows the pointer', press: 'on press', click: 'on click' };
-	if (motion === undefined) add('Motion', 'recording…');
-	else if (motion) {
-		let mine = motion.motions.filter((m) => m.node === n.i && m.frames > 2 && m.trigger !== 'leave');
-		if (mine.some((m) => m.exact)) mine = mine.filter((m) => m.exact).filter((m, k, a2) => a2.findIndex((x) => x.exactId === m.exactId) === k);
-		const loop = motion.loops.find((l) => l.node === n.i);
-		for (const m of mine.slice(0, 3)) add(`Moves ${WHEN[m.trigger] ?? m.trigger}`, `${m.exact?.duration ?? m.duration} ms${m.delay > 20 || m.exact?.delay ? `, after ${m.exact?.delay || m.delay} ms` : ''}${m.spring ? ', spring' : m.exact?.easing && !/^eased per/.test(m.exact.easing) ? `, ${m.exact.easing}` : m.bezier ? `, cubic-bezier(${m.bezier.c.join(', ')})` : ''}`);
-		if (loop) add('Loops', loop.css ? `${Math.round(loop.css.duration)} ms, forever` : loop.continuous ? 'continuously' : `every ${loop.period} ms`);
-		if (!mine.length && !loop) add('Motion', 'none');
-	}
-	return rows;
+	return out.join('\n');
 }
 
 /** A prompt that builds just this layer: its exact CSS under a real name, how it moves, its art. */
 export function layerPrompt(ctx, x, motion) {
 	const { n } = x, cls = slugOf(x.name);
 	const host = (() => { try { return new URL(ctx.url).host.replace(/^www\./, ''); } catch { return ctx.url; } })();
-	const css = [`${n.i}`, `${n.i}::before`, `${n.i}::after`].filter((k) => ctx.rules.has(k)).map((k) => `.${cls}${k.replace(/^\d+/, '')} { ${ctx.rules.get(k).join('; ')} }`).join('\n');
+	const css = cssFor(ctx, x);
 	const L = [];
 	L.push(`# Build this: ${x.name.replace(/ \(layer-\d+\.\w+\)/, '')}, from ${host}`);
 	L.push('');
@@ -257,7 +147,7 @@ export function viewOf(ctx, motion, pics) {
 	return {
 		size: ctx.size, offset: ctx.offset, clip: ctx.clip,
 		frame: ctx.structure.flatMap((n) => howOf({ ...n, paint: [] }, ctx.states, motion ?? null)).slice(0, 4),
-		layers: ctx.info.map((x0, k) => { const x = { ...x0, how: howOf(x0.n, ctx.states, motion ?? null) }; return { n: x.k, name: x.name, how: x.how, specs: specsOf(x.n, motion), prompt: layerPrompt(ctx, x, motion), css: [`${x.n.i}`, `${x.n.i}::before`, `${x.n.i}::after`].filter((q) => ctx.rules.has(q)).map((q) => `.${slugOf(x.name)}${q.replace(/^\d+/, '')} { ${ctx.rules.get(q).join('; ')} }`).join('\n'), ...(pics ? { png: pics[k].toString('base64') } : {}) }; }),
+		layers: ctx.info.map((x0, k) => { const x = { ...x0, how: howOf(x0.n, ctx.states, motion ?? null) }; return { n: x.k, name: x.name, how: x.how, specs: groupSpecs(x.n, motion), prompt: layerPrompt(ctx, x, motion), css: cssFor(ctx, x), ...(pics ? { png: pics[k].toString('base64') } : {}) }; }),
 	};
 }
 
@@ -312,23 +202,27 @@ export function lessonOf(ctx, motion, note) {
 }
 
 /** Everything for "Break it down": LESSON.md, exploded.png, steps/step-N.png. */
-export async function breakdown({ dir, file, css, states, motion = null, files = [], url, label, note, onView = null }) {
+export async function breakdown({ dir, file, css, states, motion = null, files = [], url, label, note, onView = null, given = null }) {
 	const { page, close } = await launch({ width: 1600, height: 1200 });
 	try {
 		await goto(page, pathToFileURL(file).href, { settle: 2500 });
 		await page.send('Emulation.setDefaultBackgroundColorOverride', { color: { r: 0, g: 0, b: 0, a: 0 } });
 		await page.eval(`(() => { const s = document.createElement('style'); s.textContent = 'html,body{background:transparent!important} *,*::before,*::after{transition:none!important;animation-play-state:paused!important}'; document.head.appendChild(s); const v = document.createElement('style'); v.id = 'sp-iso'; document.head.appendChild(v); })()`);
+		await page.eval(`window.__spKit = (${spKit.toString()})()`);
 		const a = await page.run(anatomy);
 		if (!a) throw new Error('could not read the copy');
 		const painting = a.nodes.filter((n) => n.paint.length || Object.values(n.pseudos).some((p) => p.paint.length));
 		const structure = a.nodes.filter((n) => !painting.includes(n) && (n.fx.mask || n.fx.perspective || n.fx.clip || n.fx.transform || n.fx.filter));
-		const layers = painting.slice(0, 14);
-		const iso = (vis, force = []) => page.eval(`document.getElementById('sp-iso').textContent = ${JSON.stringify(`*{visibility:hidden!important}${vis.map((i) => `.c${i}{visibility:visible!important}`).join('')}${force.map((i) => `.c${i}{opacity:1!important}`).join('')}`)}`);
+		// the layers: as the page grouped them (when it took it apart there), else grouped here
+		const byI = new Map(a.nodes.map((x) => [x.i, x]));
+		const groups = given?.length ? given.map((g) => ({ ...g, n: byI.get(g.i) })).filter((g) => g.n) : groupLayers(a.nodes, files);
+		const layers = groups.map((g) => ({ ...g.n, sub: g.sub, members: g.members, gname: g.name, gbox: g.box }));
+		const iso = (vis, force = []) => page.eval(`document.getElementById('sp-iso').textContent = ${JSON.stringify(`*{visibility:hidden!important}${vis.map((n) => `${(n.members ?? [n.i]).map((m) => `.c${m}`).join(',')}{visibility:visible!important}`).join('')}${force.map((i) => `.c${i}{opacity:1!important}`).join('')}`)}`);
 		mkdirSync(path.join(dir, 'layers'), { recursive: true });
 		mkdirSync(path.join(dir, 'steps'), { recursive: true });
 		const pics = [];
 		for (const [k, n] of layers.entries()) {
-			await iso([n.i], n.fx.opacity === '0' ? [n.i] : []);
+			await iso([n], n.fx.opacity === '0' ? [n.i] : []);
 			await wait(60);
 			const png = await shot(page, { ...a.clip, format: 'png' });
 			writeFileSync(path.join(dir, 'layers', `layer-${k + 1}.png`), png);
@@ -336,13 +230,13 @@ export async function breakdown({ dir, file, css, states, motion = null, files =
 		}
 		const rules = new Map();
 		for (const m of css.matchAll(/^\.c(\d+)(::(?:before|after))?\{([^}]*)\}/gm)) rules.set(`${m[1]}${m[2] ?? ''}`, cleanDecls(m[3]));
-		const info = layers.map((n, k) => ({ k: k + 1, n, name: nameOf(n, files), how: howOf(n, states, motion) }));
+		const info = layers.map((n, k) => ({ k: k + 1, n, name: n.gname ?? nameOf(n, files), how: howOf(n, states, motion) }));
 		const ctx = { layers, info, rules, files, url, label, states, structure, size: a.size, offset: { x: a.clip.x - a.rootPage.x, y: a.clip.y - a.rootPage.y }, clip: { w: a.clip.width, h: a.clip.height } };
 		// the view on the page goes up now; the steps and the pictures below follow while they look at it
 		const view = viewOf(ctx, motion, pics);
 		if (onView) await onView(view).catch(() => {});
 		for (const k of layers.keys()) {
-			await iso(layers.slice(0, k + 1).map((n) => n.i));
+			await iso(layers.slice(0, k + 1));
 			await wait(60);
 			writeFileSync(path.join(dir, 'steps', `step-${k + 1}.png`), await shot(page, { ...a.clip, format: 'png' }));
 		}

@@ -157,10 +157,12 @@ Teach it. For each pick: show the exploded view, then walk through the layers bo
 					try {
 						const files = Array.isArray(x.asset) ? x.asset.map((f) => ({ src: f.src, file: f.file })) : x.asset ? [{ src: x.asset.src, file: x.asset.file }] : [];
 						const title = `${x.label.split(' · ')[0]}, ${new URL(batch.url).host.replace(/^www\./, '')}`;
-						let shown = false;
-						// the first pick goes up on the page the moment its layers are photographed; the motion follows
-						const onView = x === good[0] ? async (view) => { shown = await pick.showView(x.elPath, view, title, x.md).catch(() => false); if (shown) await pick.say('Taken apart. Hover a layer, Esc puts it back'); } : null;
-						const b = await breakdown({ dir: x.dir, file: x.r.file, css: x.r.code.css, states: x.r.states, motion: x.finish ? undefined : x.r.motion, files, url: batch.url, label: title, note: x.note, onView });
+						// taken apart in the page already (instant), or put up the moment its layers are photographed
+						const inst = batch.instant && batch.instant.n === x.n ? batch.instant : null;
+						let shown = !!inst;
+						const onView = !inst && x === good[0] ? async (view) => { shown = await pick.showView(x.elPath, view, title, x.md).catch(() => false); if (shown) await pick.say('Taken apart. Hover a layer, Esc puts it back'); } : null;
+						const b = await breakdown({ dir: x.dir, file: x.r.file, css: x.r.code.css, states: x.r.states, motion: x.finish ? undefined : x.r.motion, files, url: batch.url, label: title, note: x.note, onView, given: inst?.layers });
+						if (inst) { await pick.updateView({ all: x.md, layers: viewOf(b.ctx, undefined, null).layers }).catch(() => {}); await pick.say('Taken apart. Hover a layer, Esc puts it back'); }
 						const motion = x.finish ? await x.finish().catch(() => null) : x.r.motion;
 						if (x.finish) {
 							// the motion is in: the cards, the prompts and the lesson get it
