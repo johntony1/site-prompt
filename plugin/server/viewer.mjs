@@ -73,7 +73,7 @@ export function viewer() {
 		svg.lines path.card{stroke:var(--muted);stroke-dasharray:3 3}
 		svg.lines circle{fill:#09090b;stroke:var(--ink);stroke-width:1.25}
 		svg.lines circle.card{stroke:var(--faint)}
-		.spec{position:fixed;right:28px;top:120px;width:330px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0) 40%),var(--panel);border-radius:14px;box-shadow:0 0 0 1px var(--line),0 0 0 1px rgba(0,0,0,.55),0 1px 0 rgba(255,255,255,.04) inset,0 24px 48px -12px rgba(0,0,0,.6);opacity:0;transition:opacity .35s ease .5s,top .35s cubic-bezier(.2,.8,.2,1)}
+		.spec{position:fixed;right:28px;top:120px;width:360px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0) 40%),var(--panel);border-radius:14px;box-shadow:0 0 0 1px var(--line),0 0 0 1px rgba(0,0,0,.55),0 1px 0 rgba(255,255,255,.04) inset,0 24px 48px -12px rgba(0,0,0,.6);opacity:0;transition:opacity .35s ease .5s,top .35s cubic-bezier(.2,.8,.2,1)}
 		.on .spec{opacity:1}
 		.spec .ch{display:flex;align-items:center;gap:9px;padding:14px 16px 10px}
 		.spec .ch i{font:600 10.5px/20px var(--mono);font-style:normal;height:20px;padding:0 7px;border-radius:6px;background:var(--blue);color:#fff}
@@ -84,6 +84,9 @@ export function viewer() {
 		.spec .why{margin:0 12px 6px;padding:10px 12px;border-radius:10px;background:rgba(61,123,255,.08);box-shadow:inset 0 0 0 1px rgba(61,123,255,.18)}
 		.spec .why p{font-size:12.5px;line-height:1.5;color:var(--ink2)}
 		.spec .why p+p{margin-top:6px}
+		.spec pre{margin:6px 12px 10px;padding:10px 12px;max-height:180px;overflow:auto;border-radius:9px;background:rgba(0,0,0,.35);box-shadow:inset 0 0 0 1px var(--line);font:400 11px/1.55 var(--mono);color:var(--ink2);white-space:pre-wrap;word-break:break-word}
+		.spec .sec small .mini{appearance:none;border:0;float:right;margin-top:-3px;height:18px;padding:0 7px;border-radius:5px;font:500 10.5px/18px var(--mono);letter-spacing:.04em;text-transform:none;color:var(--ink2);background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px var(--line);cursor:pointer}
+		.spec .sec small .mini:hover{color:var(--ink)}
 		.spec .chips{display:flex;flex-wrap:wrap;gap:5px;padding:6px 16px 10px}
 		.spec .chips span{font-size:11.5px;color:var(--ink2);padding:3px 8px;border-radius:6px;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px var(--line)}
 		.spec .row{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:30px;font-size:12.5px;border-top:1px solid rgba(255,255,255,.05)}
@@ -265,6 +268,9 @@ export function viewer() {
 		card.innerHTML = `<div class="ch"><i>${pad2(l.n)}</i><b>${esc(l.name)}</b></div>
 			<div class="body">
 			${l.why?.length ? `<div class="why">${l.why.map((w) => `<p>${esc(w)}</p>`).join('')}</div>` : ''}
+			${sect('Design', l.design)}
+			${sect('Engineering', l.eng)}
+			${l.authored ? `<div class="sec"><small>Authored CSS <button class="mini" data-c="authored">Copy</button></small><pre>${esc(l.authored)}</pre></div>` : ''}
 			${sect('Look', l.specs.filter((r) => !isMotion(r)))}
 			${sect('Type', l.type)}
 			${sect('Layout', l.layout)}
@@ -272,7 +278,8 @@ export function viewer() {
 			${sect('Motion', l.specs.filter(isMotion))}
 			</div>
 			<div class="acts"><button class="b p" data-c="prompt" ${l.prompt ? '' : 'disabled style="opacity:.55"'}>${l.prompt ? 'Copy prompt' : 'Writing prompt…'}</button><button class="b" data-c="css" ${l.css ? '' : 'disabled style="opacity:.55"'}>Copy CSS</button></div>`;
-		card.querySelector('[data-c=prompt]').addEventListener('click', (e) => V.layers[k].prompt && copy(V.layers[k].prompt, e.currentTarget, 'Copy prompt'));
+		card.querySelector('[data-c=prompt]').addEventListener('click', (e) => V.layers[k].prompt && copy(V.layers[k].prompt + (V.layers[k].authored ? `\n\n## Authored CSS (as written on the site: variables, media queries and states)\n\`\`\`css\n${V.layers[k].authored}\n\`\`\`` : ''), e.currentTarget, 'Copy prompt'));
+		card.querySelector('[data-c=authored]')?.addEventListener('click', (e) => copy(V.layers[k].authored, e.currentTarget, 'Copy'));
 		card.querySelector('[data-c=css]').addEventListener('click', (e) => V.layers[k].css && copy(V.layers[k].css, e.currentTarget, 'Copy CSS'));
 	};
 	const lines = () => {
@@ -479,6 +486,70 @@ export async function instant(el, title) {
 		if (op > 0 && op < 0.5) W.push(`Kept faint (opacity ${op}) so it stays in the background.`);
 		if (g.moving) W.push('It moves on its own on the page; here it plays live, in step with the page.');
 		out.why = W.slice(0, 3);
+		// ---- design details
+		const D = [];
+		const px = (v) => parseFloat(v) || 0;
+		const spacing = [...new Set([...pad, cs.rowGap, cs.columnGap].map(px).filter((v) => v > 0))];
+		if (spacing.length) { const grid = spacing.every((v) => v % 8 === 0) ? 8 : spacing.every((v) => v % 4 === 0) ? 4 : 0; D.push({ k: 'Spacing', v: `${spacing.sort((x, y) => x - y).join(' / ')}px${grid ? `, on a ${grid}px grid` : ', off-grid'}` }); }
+		const rad = px(cs.borderTopLeftRadius);
+		if (rad && e.parentElement) {
+			const pcs = getComputedStyle(e.parentElement), pr = px(pcs.borderTopLeftRadius), pp = Math.min(px(pcs.paddingTop), px(pcs.paddingLeft));
+			if (pr && pp) D.push({ k: 'Corner nesting', v: Math.abs(pr - pp - rad) <= 1 ? `concentric (${pr} − ${pp} = ${rad})` : `outer ${pr}, inner ${rad} (concentric would be ${Math.max(0, pr - pp)})` });
+		}
+		const outerSh = sh.filter((x) => !/inset/.test(x));
+		if (outerSh.length) { const maxBlur = Math.max(...outerSh.map((x) => { const n = x.replace(/rgba?\([^)]*\)/g, '').trim().split(/\s+/).map(px); return n[2] || 0; })); D.push({ k: 'Elevation', v: `${maxBlur >= 32 ? 'high (floating)' : maxBlur >= 12 ? 'medium (raised)' : maxBlur > 0 ? 'low (resting)' : 'flat'}, ${outerSh.length} shadow${outerSh.length > 1 ? 's' : ''}` }); }
+		// ---- the site's own rules for it: as written, with variables, media queries and states
+		const rules = [];
+		const walk = (list, cond) => {
+			for (const r of list) {
+				if (r.constructor.name === 'CSSStyleRule') {
+					for (const part of r.selectorText.split(',')) {
+						const state = (part.match(/:(hover|focus-visible|focus-within|focus|active|checked|disabled|aria-[\w-]+)/) || [])[1] || null;
+						const pseudo = (part.match(/::?(before|after)\b/) || [])[1] || null;
+						const base = part.replace(/::?(hover|focus-visible|focus-within|focus|active|checked|disabled|before|after|placeholder|marker|selection)\b(\([^)]*\))?/g, '').trim() || '*';
+						let m = false; try { m = e.matches(base); } catch {}
+						// only rules aimed at it (a class, an id, an attribute), not resets for every element
+						if (m && /[.#\[]/.test(base) && !/^[\s*]*$/.test(base)) {
+							const css = [...r.style].filter((p) => !/^--tw-/.test(p)).map((p) => `${p}: ${r.style.getPropertyValue(p)}${r.style.getPropertyPriority(p) ? ' !important' : ''}`).join('; ');
+							if (css) rules.push({ sel: part.trim(), state, pseudo, cond: cond.join(' › '), css });
+							break;
+						}
+					}
+				} else if (r.cssRules) walk(r.cssRules, [...cond, `@${r.constructor.name.replace(/^CSS|Rule$/g, '').toLowerCase()}${r.conditionText || r.media?.mediaText ? ' ' + (r.conditionText || r.media.mediaText) : r.name ? ' ' + r.name : ''}`]);
+			}
+		};
+		let blocked = 0;
+		for (const sheet of document.styleSheets) { let list; try { list = sheet.cssRules; } catch { blocked++; continue; } walk(list, []); }
+		const authored = rules.filter((r) => r.css).slice(0, 40);
+		out.authored = authored.map((r) => `${r.cond ? `/* ${r.cond} */ ` : ''}${r.sel} { ${r.css} }`).join('\n').slice(0, 6000);
+		const tokens = [...new Set(authored.flatMap((r) => [...r.css.matchAll(/var\((--[\w-]+)/g)].map((m) => m[1])))].filter((t) => !/^--tw-/.test(t)).slice(0, 10);
+		for (const t of tokens) D.push({ k: t, v: (cs.getPropertyValue(t).trim() || '?').slice(0, 40), sw: /^(#|rgb|hsl|oklch|lab|color)/.test(cs.getPropertyValue(t).trim()) ? cs.getPropertyValue(t).trim() : undefined });
+		out.design = D;
+		// ---- engineering
+		const E = [];
+		const tag = e.tagName.toLowerCase();
+		const role = e.getAttribute('role'), aria = [...e.attributes].filter((x) => x.name.startsWith('aria-')).map((x) => `${x.name}="${x.value.slice(0, 20)}"`);
+		E.push({ k: 'Element', v: `<${tag}${role ? ` role="${role}"` : ''}${e.getAttribute('type') ? ` type="${e.getAttribute('type')}"` : ''}>${aria.length ? ' ' + aria.slice(0, 2).join(' ') : ''}` });
+		const cls = typeof e.className === 'string' ? e.className.trim().split(/\s+/).filter(Boolean) : [];
+		if (cls.length) { const tw = cls.filter((c) => /^(-?[a-z]+:)*-?(p[xytrbl]?|m[xytrbl]?|gap|w|h|min-w|max-w|rounded|shadow|text|bg|border|flex|grid|items|justify|font|leading|tracking|opacity|z|inset|top|left|right|bottom|transition|duration|ease)-?/.test(c) || /\[.+\]/.test(c)); E.push({ k: tw.length >= Math.max(2, cls.length / 2) ? 'Tailwind classes' : 'Classes', v: cls.slice(0, 8).join(' ').slice(0, 120) }); }
+		const states = [...new Set(rules.filter((r) => r.state).map((r) => r.state))];
+		E.push({ k: 'States in CSS', v: states.length ? states.map((x) => ':' + x).join(' ') : 'none written' });
+		const media = [...new Set(rules.map((r) => r.cond).filter((c) => /@media|@container/.test(c)))];
+		if (media.length) E.push({ k: 'Responsive', v: media.slice(0, 3).map((m) => m.replace(/^@(media|container) /, '')).join(' · ').slice(0, 120) });
+		if (cs.transitionDuration && cs.transitionDuration !== '0s') {
+			const props = cs.transitionProperty.split(',').map((x) => x.trim());
+			const cheap = props.every((x) => /^(transform|opacity|translate|scale|rotate|filter)$/.test(x));
+			E.push({ k: 'Transitions', v: `${props.join(', ')} (${cs.transitionDuration.split(',')[0].trim()}, ${cs.transitionTimingFunction.split(/,(?![^(]*\))/)[0].trim()})${cheap ? ', GPU-friendly' : props.includes('all') ? ', all properties (costly)' : ', animates layout or paint'}` });
+		}
+		if (cs.willChange !== 'auto') E.push({ k: 'will-change', v: cs.willChange });
+		const interactive = e.matches('a[href],button,input,select,textarea,summary,[role=button],[tabindex]');
+		if (interactive) {
+			const rr = e.getBoundingClientRect();
+			E.push({ k: 'Hit size', v: `${Math.round(rr.width)} × ${Math.round(rr.height)}${Math.min(rr.width, rr.height) >= 44 ? ', comfortable' : Math.min(rr.width, rr.height) >= 24 ? ', meets 24px minimum' : ', below 24px'}` });
+			E.push({ k: 'Focus style', v: states.some((x) => /focus/.test(x)) ? 'written (:focus / :focus-visible)' : 'none written (browser default)' });
+		}
+		if (blocked) E.push({ k: 'Note', v: `${blocked} stylesheet${blocked > 1 ? 's' : ''} from another origin could not be read` });
+		out.eng = E;
 		return out;
 	};
 	const fonts = [];
@@ -504,5 +575,5 @@ export async function instant(el, title) {
 	const V = { el, title, mirror, html: snap.html, rules: snap.rules, bg, size: { w: r.width, h: r.height }, offset: { x: 0, y: 0 }, clip: { w: r.width, h: r.height }, layers };
 	window.__spView = V;
 	window.__spViewer();
-	return { html: snap.html, rules: snap.rules, fonts: [...new Set(fonts)], bg, size: V.size, why, layers: layers.map(({ specs, type, layout, holds, why: w, ...l }) => l) };
+	return { html: snap.html, rules: snap.rules, fonts: [...new Set(fonts)], bg, size: V.size, why, layers: layers.map(({ specs, type, layout, holds, why: w, design, eng, authored, ...l }) => ({ ...l, authored })) };
 }
