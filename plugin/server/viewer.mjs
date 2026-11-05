@@ -409,13 +409,13 @@ export function viewer() {
 		card.innerHTML = `<div class="ch"><i>${pad2(l.n)}</i><b>${esc(l.name)}</b></div>
 			<div class="body">
 			${l.why?.length ? `<div class="why">${l.why.map((w) => `<p>${esc(w)}</p>`).join('')}</div>` : ''}
+			${l.parts?.length ? `<div class="sec"><small>Parts <span style="text-transform:none;letter-spacing:0;font-family:inherit">· click one, or double-click it on the canvas</span></small><div class="tree">${treeOf(l.parts, 0)}</div></div>` : l.holds?.length ? `<div class="sec"><small>Holds</small><div class="chips">${l.holds.map((h) => `<span>${esc(h)}</span>`).join('')}</div></div>` : ''}
 			${sect('Design', l.design)}
 			${sect('Engineering', l.eng)}
 			${l.authored ? `<div class="sec"><small>Authored CSS <button class="mini" data-c="authored">Copy</button></small><pre>${esc(l.authored)}</pre></div>` : ''}
 			${sect('Look', l.specs.filter((r) => !isMotion(r)))}
 			${sect('Type', l.type)}
 			${sect('Layout', l.layout)}
-			${l.parts?.length ? `<div class="sec"><small>Parts <span style="text-transform:none;letter-spacing:0;font-family:inherit">· click one, or double-click it on the canvas</span></small><div class="tree">${treeOf(l.parts, 0)}</div></div>` : l.holds?.length ? `<div class="sec"><small>Holds</small><div class="chips">${l.holds.map((h) => `<span>${esc(h)}</span>`).join('')}</div></div>` : ''}
 			${sect('Motion', l.specs.filter(isMotion))}
 			</div>
 			<div class="acts"><button class="b p" data-c="prompt" ${l.prompt ? '' : 'disabled style="opacity:.55"'}>${l.prompt ? 'Copy prompt' : 'Writing prompt…'}</button><button class="b" data-c="css" ${l.css ? '' : 'disabled style="opacity:.55"'}>Copy CSS</button></div>`;
