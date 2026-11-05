@@ -24,8 +24,8 @@ export function spKit() {
 			if (/^(img|svg|video|canvas|picture)$/.test(t)) p.push({ k: 'media', v: t === 'img' ? el.currentSrc || el.src : t });
 			// the shapes inside a drawing paint with fill and stroke
 			if (el.namespaceURI === 'http://www.w3.org/2000/svg' && /^(path|line|polyline|polygon|circle|ellipse|rect|text|use|image)$/.test(t)) {
-				if (cs.stroke !== 'none' && !clear(cs.stroke) && parseFloat(cs.strokeWidth) > 0 && parseFloat(cs.strokeOpacity ?? 1) > 0) p.push({ k: 'stroke', v: `${cs.strokeWidth} ${cs.stroke}${cs.strokeDasharray !== 'none' ? `, dashed ${cs.strokeDasharray}` : ''}` });
-				if (cs.fill !== 'none' && !clear(cs.fill) && parseFloat(cs.fillOpacity ?? 1) > 0 && t !== 'line') p.push({ k: 'vfill', v: cs.fill });
+				if (cs.stroke !== 'none' && !clear(cs.stroke) && parseFloat(cs.strokeWidth) > 0 && parseFloat(cs.strokeOpacity ?? 1) > 0) p.push({ k: 'stroke', v: `${cs.strokeWidth} ${cs.stroke}${parseFloat(cs.strokeOpacity) < 1 ? ` at ${Math.round(parseFloat(cs.strokeOpacity) * 100)}%` : ''}${cs.strokeDasharray !== 'none' ? `, dashed ${cs.strokeDasharray}` : ''}` });
+				if (cs.fill !== 'none' && !clear(cs.fill) && parseFloat(cs.fillOpacity ?? 1) > 0 && t !== 'line') p.push({ k: 'vfill', v: `${cs.fill}${parseFloat(cs.fillOpacity) < 1 ? ` at ${Math.round(parseFloat(cs.fillOpacity) * 100)}%` : ''}` });
 				if (t === 'text' && el.textContent.trim()) p.push({ k: 'text', v: el.textContent.trim().slice(0, 80) });
 			}
 		}
@@ -104,6 +104,14 @@ export function spKit() {
 		if (media) {
 			const f = files.find((x) => x.src === media.v);
 			return `${n.alt || fileName(media.v) || n.tag}${f ? ` (${f.file})` : ''}`;
+		}
+		// a shape inside a drawing: say what it draws and how strongly
+		const vf = n.paint.find((p) => p.k === 'vfill'), st = n.paint.find((p) => p.k === 'stroke');
+		if ((vf || st) && !n.paint.some((p) => p.k === 'text')) {
+			const pc = (vf ?? st).v.match(/ at (\d+)%/)?.[1], op = pc ? ` (${pc}%)` : n.op < 0.98 ? ` (${Math.round(n.op * 100)}%)` : '';
+			if (st && !vf) return `${/dashed/.test(st.v) ? 'Dashed lines' : 'Lines'}${op}`;
+			if (vf && !st) return `${n.tag === 'circle' ? 'Dot' : n.tag === 'g' || n.tag === 'path' ? 'Shapes' : n.tag[0].toUpperCase() + n.tag.slice(1)}${op}`;
+			return `Outlined shapes${op}`;
 		}
 		const text = n.paint.find((p) => p.k === 'text');
 		if (text && n.paint.some((p) => /^(fill|shadow|gradient|border)$/.test(p.k)) && n.box.w >= 60 && n.box.h >= 40) return `Card "${text.v.slice(0, 32)}"`;
