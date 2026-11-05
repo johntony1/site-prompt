@@ -219,7 +219,7 @@ export async function breakdown({ dir, file, css, states, motion = null, files =
 		if (!groups.length) groups = groupLayers(a.nodes, files); // the page's layers did not match this copy: group here
 		if (!groups.length) groups = [{ i: a.nodes[0].i, sub: true, members: a.nodes.map((x) => x.i), name: 'The whole thing', n: a.nodes[0] }];
 		const layers = groups.map((g) => ({ ...g.n, sub: g.sub, members: g.members, gname: g.name, gbox: g.box }));
-		const iso = (vis, force = []) => page.eval(`document.getElementById('sp-iso').textContent = ${JSON.stringify(`*{visibility:hidden!important}${vis.map((n) => `${(n.members ?? [n.i]).map((m) => `.c${m}`).join(',')}{visibility:visible!important}`).join('')}${force.map((i) => `.c${i}{opacity:1!important}`).join('')}`)}`);
+		const iso = (vis, force = []) => page.eval(`document.getElementById('sp-iso').textContent = ${JSON.stringify(`*{visibility:hidden!important}:is(clipPath,mask,pattern,linearGradient,radialGradient,marker,symbol,filter) *{visibility:visible!important}${vis.map((n) => `${(n.members ?? [n.i]).map((m) => `.c${m}`).join(',')}{visibility:visible!important}`).join('')}${force.map((i) => `.c${i}{opacity:1!important}`).join('')}`)}`);
 		mkdirSync(path.join(dir, 'layers'), { recursive: true });
 		mkdirSync(path.join(dir, 'steps'), { recursive: true });
 		const pics = [];

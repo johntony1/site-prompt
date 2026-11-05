@@ -109,7 +109,15 @@ const socket = (url) => new Promise((resolve, reject) => {
 });
 
 /** A Chrome of its own (closed with .close()). headless: false opens a real window the person can use. */
-export async function launch({ headless = true, width = 1440, height = 900, profileDir = null } = {}) {
+export async function launch(opts = {}) {
+	// a busy machine can take a while to start Chrome: give it time, and one more go
+	try { return await launchOnce(opts); } catch (e) {
+		if (!/did not start|exited/.test(e.message)) throw e;
+		return launchOnce(opts);
+	}
+}
+
+async function launchOnce({ headless = true, width = 1440, height = 900, profileDir = null } = {}) {
 	const exe = findChrome();
 	if (!exe) throw new ToolError('site-prompt needs Chrome (or Chromium, Edge, Brave) and found none. Install Google Chrome, or set SITE_PROMPT_CHROME to a Chromium-based browser.');
 	const profile = profileDir ?? mkdtempSync(path.join(os.tmpdir(), 'site-prompt-chrome-'));
@@ -122,7 +130,7 @@ export async function launch({ headless = true, width = 1440, height = 900, prof
 	], { stdio: ['ignore', 'ignore', 'pipe'] });
 	const endpoint = await new Promise((resolve, reject) => {
 		let err = '';
-		const timer = setTimeout(() => reject(new Error('Chrome did not start in 20 s')), 20_000);
+		const timer = setTimeout(() => { try { proc.kill('SIGKILL'); } catch {} reject(new Error('Chrome did not start in 45 s')); }, 45_000);
 		proc.stderr.on('data', (d) => {
 			err += d;
 			const m = err.match(/DevTools listening on (ws:\/\/\S+)/);

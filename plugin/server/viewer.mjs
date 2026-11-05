@@ -173,6 +173,7 @@ export function viewer() {
 		.copy *,.copy *::before,.copy *::after{transition:none!important;animation-name:none!important}
 		${V.html ? (V.rules ?? []).join('\n') : ''}
 		${V.html && V.rootW ? `.copy > .c0,.whole > .c0{width:${V.rootW}px!important;min-width:0!important;max-width:none!important;box-sizing:border-box!important;margin:0!important}` : ''}
+		.copy :is(clipPath,mask,pattern,linearGradient,radialGradient,marker,symbol,filter) *,.whole :is(clipPath,mask,pattern,linearGradient,radialGradient,marker,symbol,filter) *{visibility:visible!important}
 		${V.html ? V.layers.map((l, k) => `.p${k} *{visibility:hidden!important}${(l.members ?? [l.i]).map((m) => `.p${k} .c${m}`).join(',')}{visibility:visible!important}${l.force ? `.p${k} .c${l.i}{opacity:1!important}` : ''}`).join('\n') : ''}
 	</style>
 	<div class="v" style="${slabVars(V.bg)}">
@@ -627,12 +628,17 @@ export async function instant(el, title, area = null, show = true, pre = null) {
 	// what can actually be seen: a part entirely covered by others (an icon behind a card) is not torn out of the picture
 	const R = { left: a.vis.x, top: a.vis.y };
 	const covered = new Set();
+	const seenOp = new Map();
 	const blocks = (t) => {
 		if (/^(CANVAS|svg)$/i.test(t.tagName) || t.closest?.('svg') && t.tagName.toLowerCase() !== 'svg' || t.closest('site-prompt-ui,site-prompt-view')) return false;
 		const j = t.getAttribute?.('data-sp-n');
 		if (j != null && moving.has(+j)) return false;
 		const c = getComputedStyle(t);
-		if (parseFloat(c.opacity) < 0.6 || c.visibility === 'hidden') return false;
+		if (c.visibility === 'hidden') return false;
+		// how see-through it really is: its own opacity times every parent's (a hidden panel stacked over this one)
+		let op = 1;
+		for (let x = t; x && x !== document.documentElement; x = x.parentElement) { if (seenOp.has(x)) { op *= seenOp.get(x); break; } op *= parseFloat(getComputedStyle(x).opacity); if (op < 0.6) break; }
+		if (op < 0.6) return false;
 		if (/^(IMG|VIDEO|PICTURE|IFRAME)$/.test(t.tagName)) return true;
 		const v = (c.backgroundColor.match(/[\d.]+/g) ?? []).map(Number);
 		return v.length >= 3 && (v[3] ?? 1) > 0.6 || /url\(/.test(c.backgroundImage);
@@ -652,7 +658,8 @@ export async function instant(el, title, area = null, show = true, pre = null) {
 				// look down through what lies above it: only something that really hides it (a filled box, a picture) counts;
 				// a see-through canvas, an outline, a text layer or a moving overlay on top does not
 				for (const t of document.elementsFromPoint(x, y)) {
-					if (t === e || e.contains(t)) { hits++; break; }
+					// reaching it, a part of it, or what holds it (painted underneath it) means nothing above hides it here
+					if (t === e || e.contains(t) || t.contains(e)) { hits++; break; }
 					if (blocks(t)) break;
 				}
 			}

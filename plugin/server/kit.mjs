@@ -295,6 +295,20 @@ export function spKit() {
 		const chain = []; // a card that holds everything keeps its own slab while we look inside it
 		for (let k = 0; k < 4 && pieces.length === 1; k++) { const inner = top(pieces[0]); if (inner.length < 2) break; chain.push(pieces[0]); pieces = inner; }
 		{
+			// a piece that holds most of it (a frame around three cards) opens into its own pieces while they fit
+			const inside0 = (x) => [x, ...under(x)].filter((m) => P.includes(m));
+			for (let guard = 0; guard < 6; guard++) {
+				const big = pieces.filter((x) => inside0(x).length >= 6).sort((a, b) => inside0(b).length - inside0(a).length)[0];
+				if (!big) break;
+				const via = [big];
+				let inner = top(big);
+				for (let k = 0; k < 3 && inner.length === 1; k++) { via.push(inner[0]); inner = top(inner[0]); }
+				if (inner.length < 2) break;
+				const slabs = chain.length + via.filter((v) => P.includes(v)).length;
+				if (pieces.length - 1 + inner.length + slabs + (P.includes(root) ? 1 : 0) + 1 > max) break;
+				pieces = pieces.filter((x) => x !== big).concat(inner);
+				chain.push(...via);
+			}
 			// distinct pieces that fit: each its own layer, with what it holds; containers keep their own slab
 			const room = max - (P.includes(root) ? 1 : 0) - chain.length - 1;
 			const R1 = root.box, diag1 = Math.hypot(R1.w, R1.h) / 2 || 1;
@@ -303,7 +317,7 @@ export function spKit() {
 				const gs = [];
 				if (P.includes(root)) gs.push({ n: root, members: [root], name: 'Panel' });
 				const claimed = new Set([root]);
-				for (const c of chain) if (P.includes(c)) { gs.push({ n: c, members: [c], name: groupName({ n: c, members: inside1(c) }, files) }); claimed.add(c); }
+				for (const c of chain) if (P.includes(c)) { gs.push({ n: c, members: [c], name: nameOf(c, files) }); claimed.add(c); }
 				for (const x of pieces) { const mem = inside1(x).filter((m) => !claimed.has(m)); mem.forEach((m) => claimed.add(m)); if (mem.length) gs.push({ n: x, members: mem }); }
 				const loose = P.filter((m) => !claimed.has(m));
 				if (loose.length) gs.push(...split(loose, Math.max(1, max - gs.length), root));

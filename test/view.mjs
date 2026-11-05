@@ -47,6 +47,16 @@ await wait(1800);
 const shown = await page.eval(`(() => { const r = document.querySelector('site-prompt-view').shadowRoot; const h = [...r.querySelectorAll('.copy h3')].find((e) => getComputedStyle(e).visibility === 'visible'); if (!h) return null; let op = 1; for (let x = h; x; x = x.parentElement) op *= parseFloat(getComputedStyle(x).opacity); const b = h.getBoundingClientRect(); return { text: h.textContent, op: Math.round(op * 100) / 100, w: Math.round(b.width) }; })()`);
 check(r3.from && r3.layers.some((n) => /Guides/.test(n)), 'a menu that closed after it was picked breaks down as it was when clicked', r3);
 check(shown && shown.op > 0.9 && shown.w > 10, 'and the view shows it open, not the closed menu', shown);
+// a menu like accessgrid's: a hidden panel stacked over the shown one, and line art clipped through a <clipPath>
+await page.eval('window.__spViewClose?.()'); await wait(1300);
+const html4 = `<body style="margin:0;font-family:Helvetica"><div id="w" style="display:grid;width:600px;margin:40px;background:#fff"><div style="grid-area:1/1"><a style="display:block;background:#fff;padding:16px"><h2 style="margin:0;font-size:15px">Tools</h2><svg width="280" height="200" viewBox="0 0 280 200"><g clip-path="url(#cl)"><circle cx="140" cy="100" r="80" fill="none" stroke="#d9d9de" stroke-width="2"/><path d="M0 0 L280 200" stroke="#d9d9de"/></g><defs><clipPath id="cl"><rect width="280" height="200"/></clipPath></defs></svg></a></div><div style="grid-area:1/1;opacity:0;pointer-events:none"><a style="display:block;background:#fff;padding:16px"><h2 style="margin:0">Pricing</h2><p>Plans</p></a></div></div></body>`;
+await page.send('Page.navigate', { url: 'data:text/html,' + encodeURIComponent(html4) }); await wait(600);
+await page.eval(`window.__spTheme = ${JSON.stringify(THEME)}; window.__spIcons = ${JSON.stringify(ICONS)}; window.__spKit = (${spKit})(); window.__spSnap = ${snapshot}; window.__spViewer = ${viewer}; window.__spInstant = ${instant};`);
+const r4 = await page.eval(`(async () => { const x = await window.__spInstant(document.getElementById('w'), 'Menu'); return { covered: x.why.covered, layers: x.layers.map((l) => l.name + ' ' + l.members.length) }; })()`);
+check(r4.covered === 0 && r4.layers.some((n) => /Tools/.test(n)), 'an invisible panel stacked on top hides nothing', r4);
+await wait(1800);
+const clip = await page.eval(`(() => { const r = document.querySelector('site-prompt-view').shadowRoot; const rects = [...r.querySelectorAll('clipPath rect')]; return rects.length && rects.every((x) => getComputedStyle(x).visibility === 'visible'); })()`);
+check(clip, 'clip shapes stay visible in every layer copy, so clipped art still paints');
 close();
 console.log(failures ? `\n${failures} failed` : '\nall passed');
 process.exit(failures ? 1 : 0);
