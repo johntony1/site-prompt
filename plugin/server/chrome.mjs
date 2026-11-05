@@ -235,8 +235,8 @@ const PROFILES = {
 };
 
 /** Where the person's running Chrome listens, if they turned remote debugging on: Chrome writes DevToolsActivePort. */
-export function ownChrome() {
-	const dirs = process.env.SITE_PROMPT_CHROME_DIR ? [process.env.SITE_PROMPT_CHROME_DIR] : PROFILES[process.platform] ?? [];
+export function ownChrome(only = null) {
+	const dirs = only ? [only] : process.env.SITE_PROMPT_CHROME_DIR ? [process.env.SITE_PROMPT_CHROME_DIR] : PROFILES[process.platform] ?? [];
 	for (const dir of dirs) {
 		try {
 			const [port, wsPath] = readFileSync(path.join(dir, 'DevToolsActivePort'), 'utf8').trim().split('\n');
@@ -247,8 +247,8 @@ export function ownChrome() {
 }
 
 /** Attach to a tab in the person's own Chrome (opening `url` in a new tab when it isn't open). Chrome asks them to allow it. */
-export async function connectOwn(url, { log = () => {} } = {}) {
-	const own = ownChrome();
+export async function connectOwn(url, { log = () => {}, dir = null } = {}) {
+	const own = ownChrome(dir);
 	if (!own) return null;
 	log('asking your Chrome (approve the prompt in Chrome)');
 	const ws = await Promise.race([socket(`ws://127.0.0.1:${own.port}${own.path}`), new Promise((_, rej) => setTimeout(() => rej(new ToolError('Your Chrome did not answer. If it showed a prompt, allow it and try again; or turn remote debugging off at chrome://inspect/#remote-debugging to use a separate window.')), 90_000))]).catch((e) => {
@@ -279,7 +279,7 @@ export async function connectOwn(url, { log = () => {} } = {}) {
 		const state = await page.eval('location.href !== "about:blank" && document.readyState').catch(() => false);
 		if (state === 'complete' || state === 'interactive') break;
 	}
-	return { page, own: true, url: target.url, close: () => { try { ws.close(); } catch {} }, router };
+	return { page, own: true, url: target.url, close: () => { try { ws.close(); } catch {} }, router, endpoint: `ws://127.0.0.1:${own.port}${own.path}` };
 }
 
 /** A second tab in the same browser (their dev site beside the site they pick from), attached and ready. */

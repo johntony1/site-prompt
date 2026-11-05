@@ -32,6 +32,9 @@ export async function open(url, { mode = 'auto', log = () => {} } = {}) {
 	let conn = null;
 	if (mode !== 'window' && ownChrome()) conn = await connectOwn(url, { log });
 	if (!conn && mode === 'own') throw new ToolError('Your Chrome is not reachable. Turn on remote debugging at chrome://inspect/#remote-debugging (Chrome 144 or later, Chrome must be open), or use mode "window".');
+	// the picker's own window may still be open from before (Chrome then refuses a second one on that profile): use it
+	const windowProfile = path.join(os.homedir(), '.site-prompt', 'chrome-profile');
+	if (!conn && process.env.SITE_PROMPT_PICK_HEADLESS !== '1') conn = await connectOwn(url, { log, dir: windowProfile }).then((c) => (c ? { ...c, own: false, reused: true } : null)).catch(() => null);
 	if (!conn) {
 		const headless = process.env.SITE_PROMPT_PICK_HEADLESS === '1';
 		const b = await launch({ headless, width: 1440, height: 900, profileDir: headless ? null : path.join(os.homedir(), '.site-prompt', 'chrome-profile') });
