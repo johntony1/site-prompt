@@ -13,7 +13,7 @@ export function overlay() {
 		const root = host.attachShadow({ mode: 'closed' });
 		root.innerHTML = `<style>${window.__spTheme || ''}</style>
 		<div class="hl"></div><div class="chip"></div><div class="marks"></div><div class="drag" hidden></div><div class="abox" hidden><span></span></div>
-		<div class="hint surface"><b>Hover</b> anything you like, <b>click</b> to pick it (again to deselect), then <b>Get prompts</b></div>
+		<div class="hint surface"><b>Hover</b> anything you like, <b>click</b> to pick it (again to deselect), then <b>Get prompts</b>. A menu that opens on hover: open it, press <b>H</b> to hold it</div>
 		<div class="pop surface"><span class="beam"></span>
 			<div class="head k"></div><div class="rule"></div>
 			<textarea placeholder="What do you like about it? (optional)" rows="2"></textarea>
@@ -23,6 +23,7 @@ export function overlay() {
 			<div class="mark">${window.__spIcons?.cursor ?? ''}</div>
 			<button class="btn on" data-a="pick" title="Pick (Esc)">${window.__spIcons?.pick ?? ''}Pick<span class="count">0</span></button>
 			<button class="btn" data-a="area" title="Drag over an area to take everything in it (A)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.5 5V3.5a1 1 0 011-1H5M11 2.5h1.5a1 1 0 011 1V5M13.5 11v1.5a1 1 0 01-1 1H11M5 13.5H3.5a1 1 0 01-1-1V11"/></svg>Area</button>
+			<button class="btn" data-a="hold" title="Hold the page as it is now, so a menu open on hover stays open while you pick in it (H)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M6 3.5v9M10 3.5v9"/></svg>Hold</button>
 			<button class="btn quiet" data-a="clear" hidden title="Deselect everything">Clear</button>
 			<span class="sep"></span>
 			<div class="seg" hidden><button data-s="exact" title="Pixel for pixel, as it is on this site">Exact</button><button data-s="mine" title="Same layout and motion, in your site's fonts, colours and radius">My style</button></div>
@@ -153,7 +154,7 @@ export function overlay() {
 		const grow = () => { note.style.height = 'auto'; note.style.height = Math.min(140, Math.max(52, note.scrollHeight)) + 'px'; };
 		note.addEventListener('input', grow);
 		const closePop = () => { if (open) open.note = note.value.trim(); open = null; pop.style.display = 'none'; };
-		const setPicking = (v) => { picking = v; pickBtn.classList.toggle('on', v); if (!v) { cur = null; show(); } };
+		const setPicking = (v) => { picking = v; pickBtn.classList.toggle('on', v); if (!v) { cur = null; show(); window.__spHold?.(false); } };
 
 		// Area: drag a rectangle; the pick is the smallest element that holds it, cut to the rectangle
 		const dragLayer = $('.drag'), abox = $('.abox'), areaBtn = $('[data-a=area]');
@@ -215,6 +216,25 @@ export function overlay() {
 			redraw();
 			openPop(p);
 		}, true);
+		// Hold: the page stays as it is (a menu open on hover stays open) while the pointer goes anywhere. The page stops
+		// hearing the pointer, and what is hovered now keeps :hover (forced by Chrome, for menus made in CSS)
+		let held = false;
+		const holdBtn = $('[data-a=hold]');
+		const setHold = (v) => {
+			if (v === held) return;
+			held = v;
+			holdBtn.classList.toggle('on', v);
+			document.querySelectorAll('[data-sp-hold]').forEach((e) => e.removeAttribute('data-sp-hold'));
+			if (v) document.querySelectorAll(':hover').forEach((e) => e.setAttribute('data-sp-hold', ''));
+			window.__spSend?.(JSON.stringify({ hold: v }));
+			window.__spStatus?.(v ? 'Held: the page stays as it is. H lets go' : '');
+		};
+		window.__spHold = setHold;
+		const POINTER = ['mousemove', 'mouseover', 'mouseout', 'mouseenter', 'mouseleave', 'pointermove', 'pointerover', 'pointerout', 'pointerenter', 'pointerleave', 'focusout', 'blur'];
+		for (const t of POINTER) addEventListener(t, (e) => { if (held && !(e.composedPath?.() ?? []).includes(host)) e.stopImmediatePropagation(); }, true);
+		addEventListener('keydown', (e) => {
+			if ((e.key === 'h' || e.key === 'H') && !e.metaKey && !e.ctrlKey && !e.altKey && !/^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName ?? '') && !(e.composedPath?.() ?? []).some((x) => x.tagName === 'TEXTAREA' || x.tagName === 'INPUT')) { e.preventDefault(); e.stopImmediatePropagation(); setHold(!held); }
+		}, true);
 		addEventListener('keydown', (e) => {
 			if (window.__spViewerOpen) return;
 			if (open && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send('send'); return; }
@@ -263,6 +283,7 @@ export function overlay() {
 				const a = e.target.closest('[data-a]')?.getAttribute('data-a');
 			if (a === 'pick') { setArea(false); setPicking(!picking); }
 				if (a === 'area') { closePop(); setArea(!areaMode); }
+				if (a === 'hold') setHold(!held);
 			if (a === 'remove' && open) unpick(open);
 				if (a === 'clear') { for (const p of [...picks]) unpick(p); status.hidden = true; }
 			if (a === 'send' || a === 'add' || a === 'learn') send(a);
@@ -278,7 +299,7 @@ export function overlay() {
 			if (t) { const a = t.getBoundingClientRect(), b = bar.getBoundingClientRect(); over = !(a.right + 24 < b.left || a.left - 24 > b.right || a.bottom + 24 < b.top || a.top - 24 > b.bottom); }
 			bar.style.visibility = over ? 'hidden' : '';
 		};
-		window.__spTest = { rect: (sel) => { const r = root.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, note: (t) => { note.value = t; }, keep: () => closePop(), cur: () => (cur ? `${cur.tagName.toLowerCase()} ${Math.round(cur.getBoundingClientRect().width)}x${Math.round(cur.getBoundingClientRect().height)} ${(cur.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 30)}` : null), style: setStyle, clear: () => (clearBtn.hidden ? '' : clearBtn.textContent), status: () => (status.hidden ? '' : status.textContent) };
+		window.__spTest = { rect: (sel) => { const r = root.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, note: (t) => { note.value = t; }, keep: () => closePop(), cur: () => (cur ? `${cur.tagName.toLowerCase()} ${Math.round(cur.getBoundingClientRect().width)}x${Math.round(cur.getBoundingClientRect().height)} ${(cur.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 30)}` : null), style: setStyle, clear: () => (clearBtn.hidden ? '' : clearBtn.textContent), status: () => (status.hidden ? '' : status.textContent), hold: (v) => setHold(v), held: () => held };
 	};
 	start();
 }

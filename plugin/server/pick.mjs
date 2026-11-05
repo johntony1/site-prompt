@@ -23,6 +23,18 @@ const LOOK = `window.__spTheme = ${JSON.stringify(THEME)}; window.__spIcons = ${
 // what Break it down needs in the page to take a pick apart on the spot
 const KIT = `window.__spKit = (${spKit.toString()})(); window.__spSnap = ${snapshot.toString()}; window.__spViewer = ${viewer.toString()}; window.__spInstant = ${instant.toString()};`;
 
+// Hold: what is hovered keeps :hover (a menu made in CSS stays open) until they let go
+async function holdPage(s, on) {
+	for (const id of s.held ?? []) await s.page.send('CSS.forcePseudoState', { nodeId: id, forcedPseudoClasses: [] }).catch(() => {});
+	s.held = [];
+	if (!on) return;
+	await s.page.send('DOM.enable').catch(() => {});
+	await s.page.send('CSS.enable').catch(() => {});
+	const { root } = await s.page.send('DOM.getDocument', { depth: 0 });
+	const { nodeIds } = await s.page.send('DOM.querySelectorAll', { nodeId: root.nodeId, selector: '[data-sp-hold]' });
+	for (const id of nodeIds) { await s.page.send('CSS.forcePseudoState', { nodeId: id, forcedPseudoClasses: ['hover'] }).catch(() => {}); s.held.push(id); }
+}
+
 let session = null; // { page, close, own, url, queue, waiter }
 
 export const active = () => !!session;
@@ -45,7 +57,10 @@ export async function open(url, { mode = 'auto', log = () => {} } = {}) {
 	await s.page.send('Runtime.addBinding', { name: '__spSend' });
 	s.page.on('Runtime.bindingCalled', (e) => {
 		if (e.name !== '__spSend') return;
-		try { s.queue.push(JSON.parse(e.payload)); } catch { return; }
+		let m;
+		try { m = JSON.parse(e.payload); } catch { return; }
+		if (m && typeof m.hold === 'boolean') { holdPage(s, m.hold).catch(() => {}); return; }
+		s.queue.push(m);
 		s.waiter?.();
 	});
 	// building a project? the toolbar offers to add picks straight to it

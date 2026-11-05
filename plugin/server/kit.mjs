@@ -219,6 +219,44 @@ export function spKit() {
 			const sub = g.members.some((m) => m !== g.n);
 			return { i: g.n.i, sub, n: g.n, members: g.members.map((m) => m.i), box: { x: box.x, y: box.y, w: box.r - box.x, h: box.b - box.y }, name: g.name ?? (sub ? groupName(g, files) : nameOf(g.n, files)) };
 		});
+		// what is left over (text without a surface, a list of entries) splits into the blocks it sits in, as many as fit:
+		// the block holding the most parts opens into its children while there is room
+		const split = (mem, room, top) => {
+			if (!mem.length) return [];
+			const memSet = new Set(mem);
+			const holds = (x) => [x, ...under(x)].filter((m) => memSet.has(m));
+			// an entry of a list (an item, a card among alike siblings, a link or a button) stays whole
+			const whole = (x) => {
+				if (x === top) return false;
+				if (/^(li|article|a|button|figure|tr)$/.test(x.tag)) return true;
+				const sib = kids.get(x.p) ?? [];
+				return sib.filter((y) => y.tag === x.tag && Math.abs(y.box.w - x.box.w) < Math.max(8, x.box.w * 0.1)).length >= 3;
+			};
+			let blocks = [top];
+			for (let guard = 0; guard < 40; guard++) {
+				blocks.sort((a, b) => (whole(a) - whole(b)) || holds(b).length - holds(a).length);
+				const big = blocks[0];
+				if (holds(big).length < 2 || whole(big)) break;
+				const kidsIn = (kids.get(big.i) ?? []).filter((c) => holds(c).length);
+				const own = memSet.has(big) && big !== top ? 1 : 0;
+				if (!kidsIn.length) break;
+				if (blocks.length - 1 + kidsIn.length + own > room) {
+					// one level too many: try the next biggest block that still fits
+					const alt = blocks.slice(1).find((b2) => { if (whole(b2)) return false; const k2 = (kids.get(b2.i) ?? []).filter((c) => holds(c).length); return k2.length >= 2 && blocks.length - 1 + k2.length <= room; });
+					if (!alt) break;
+					blocks = blocks.filter((b2) => b2 !== alt).concat((kids.get(alt.i) ?? []).filter((c) => holds(c).length));
+					continue;
+				}
+				blocks = blocks.slice(1).concat(kidsIn);
+				if (own) blocks.push({ ...big, i: big.i, __self: true });
+			}
+			const out = [];
+			for (const b of blocks) {
+				const m = b.__self ? [mem.find((x) => x.i === b.i)] : holds(b);
+				if (m.length) out.push({ n: m.find((x) => x.i === b.i) ?? m[0], members: m });
+			}
+			return out.sort((a, b) => a.n.i - b.n.i);
+		};
 		const svgRoot = nodes[0].tag === 'svg' ? nodes[0] : (() => { const k = kids.get(nodes[0].i) ?? []; return k.length === 1 && k[0].tag === 'svg' ? k[0] : null; })();
 		if (svgRoot && P.length > max) {
 			const inside2 = (x) => [x, ...under(x)].filter((m) => P.includes(m));
@@ -268,7 +306,7 @@ export function spKit() {
 				for (const c of chain) if (P.includes(c)) { gs.push({ n: c, members: [c], name: groupName({ n: c, members: inside1(c) }, files) }); claimed.add(c); }
 				for (const x of pieces) { const mem = inside1(x).filter((m) => !claimed.has(m)); mem.forEach((m) => claimed.add(m)); if (mem.length) gs.push({ n: x, members: mem }); }
 				const loose = P.filter((m) => !claimed.has(m));
-				if (loose.length) gs.push({ n: loose[0], members: loose });
+				if (loose.length) gs.push(...split(loose, Math.max(1, max - gs.length), root));
 				return finish(gs, true);
 			}
 		}
@@ -310,7 +348,7 @@ export function spKit() {
 		for (const x of onTop) { const mem = inside(x); mem.forEach((m) => claimed.add(m)); groups.push({ n: x, members: mem, name: x.paint.some((q) => q.k === 'media') && overlap(x.box, hero.box) > 0.8 && Math.abs(x.box.w - hero.box.w) < hero.box.w * 0.15 && Math.abs(x.box.h - hero.box.h) < hero.box.h * 0.15 ? 'Focus ring' : undefined }); }
 		// anything else that shows (a heading outside the cards)
 		const loose = P.filter((m) => !claimed.has(m));
-		if (loose.length) groups.splice(others.length ? 2 : 1, 0, { n: loose[0], members: loose });
+		if (loose.length) groups.splice(others.length ? 2 : 1, 0, ...split(loose, Math.max(1, max - groups.length), root));
 		return finish(groups.slice(0, max), true);
 	}
 	function drawingName(x, mem) {
@@ -329,7 +367,7 @@ export function spKit() {
 		const words = texts.filter((t) => /[A-Za-z0-9]{2}/.test(t));
 		const art = texts.length && !words.length;
 		const surface = g.n.paint.some((p) => p.k === 'fill' || p.k === 'border' || p.k === 'shadow' || p.k === 'gradient');
-		if (surface && (media.length || words.length)) return `Card${words.length ? ` "${words.slice(-1)[0].slice(0, 24)}"` : ''}`;
+		if (surface && (media.length || words.length)) return `Card${words.length ? ` "${words[0].slice(0, 28)}"` : ''}`;
 		if (art) return 'Text art';
 		if (words.length) return `Text "${words[0].slice(0, 28)}"`;
 		if (media.length === g.members.length) return media.length > 1 ? `${media.length} drawings` : nameOf(media[0], files);

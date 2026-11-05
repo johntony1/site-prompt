@@ -32,7 +32,8 @@ or says "pick", "hover", "point at":
 
 1. In one or two lines, tell them: hover anything on the page, click what you like (a note is optional), then press
    Get prompts in the toolbar, bottom right. Or press Area (or A) and drag a rectangle over any part of the page to take
-   everything inside it; ↑ picks what holds the hovered thing, ↓ goes back.
+   everything inside it; ↑ picks what holds the hovered thing, ↓ goes back. A menu that opens on hover: open it, press
+   Hold (or H) so it stays open while they pick in it, H again lets go.
 2. Call `site_pick` with the url. It opens the site with the picker (in their own Chrome when remote debugging is on
    at chrome://inspect/#remote-debugging, else a Chrome window site-prompt opens) and waits in the same call for
    their picks. If it comes back with nothing picked, call it again at once with no url: never end your turn to wait
