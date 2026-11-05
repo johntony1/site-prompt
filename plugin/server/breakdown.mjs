@@ -215,7 +215,9 @@ export async function breakdown({ dir, file, css, states, motion = null, files =
 		const structure = a.nodes.filter((n) => !painting.includes(n) && (n.fx.mask || n.fx.perspective || n.fx.clip || n.fx.transform || n.fx.filter));
 		// the layers: as the page grouped them (when it took it apart there), else grouped here
 		const byI = new Map(a.nodes.map((x) => [x.i, x]));
-		const groups = given?.length ? given.map((g) => ({ ...g, n: byI.get(g.i) })).filter((g) => g.n) : groupLayers(a.nodes, files);
+		let groups = given?.length ? given.map((g) => ({ ...g, n: byI.get(g.i) })).filter((g) => g.n) : [];
+		if (!groups.length) groups = groupLayers(a.nodes, files); // the page's layers did not match this copy: group here
+		if (!groups.length) groups = [{ i: a.nodes[0].i, sub: true, members: a.nodes.map((x) => x.i), name: 'The whole thing', n: a.nodes[0] }];
 		const layers = groups.map((g) => ({ ...g.n, sub: g.sub, members: g.members, gname: g.name, gbox: g.box }));
 		const iso = (vis, force = []) => page.eval(`document.getElementById('sp-iso').textContent = ${JSON.stringify(`*{visibility:hidden!important}${vis.map((n) => `${(n.members ?? [n.i]).map((m) => `.c${m}`).join(',')}{visibility:visible!important}`).join('')}${force.map((i) => `.c${i}{opacity:1!important}`).join('')}`)}`);
 		mkdirSync(path.join(dir, 'layers'), { recursive: true });

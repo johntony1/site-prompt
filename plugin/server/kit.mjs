@@ -80,6 +80,7 @@ export function spKit() {
 				return { x: Math.round(x0), y: Math.round(y0), w: Math.max(0, Math.round(x1 - x0)), h: Math.max(0, Math.round(y1 - y0)) };
 			})(),
 			op: Math.round(op * 100) / 100,
+			raw: { w: Math.round(r.width), h: Math.round(r.height) },
 			paint: paintOf(cs, el, false), fx: fxOf(cs, el), pseudos,
 		};
 	});
@@ -157,11 +158,19 @@ export function spKit() {
 	 * a grid of cards) is grouped at the depth where it comes to about a dozen: each group is a part and all it holds.
 	 */
 	function groupLayers(nodes, files = [], max = 12) {
+		const first = groupStrict(nodes, files, max, false);
+		if (first.length) return first;
+		const second = groupStrict(nodes, files, max, true);
+		if (second.length) return second;
+		const n = nodes[0];
+		return n ? [{ i: n.i, sub: true, n, members: nodes.map((x) => x.i), box: { x: 0, y: 0, w: n.box.w || 1, h: n.box.h || 1 }, name: 'The whole thing' }] : [];
+	}
+	function groupStrict(nodes, files, max, relaxed) {
 		const byI = new Map(nodes.map((n) => [n.i, n]));
 		const kids = new Map();
 		for (const n of nodes) if (n.p != null) (kids.get(n.p) ?? kids.set(n.p, []).get(n.p)).push(n);
 		const paints = (n) => n.paint.length || Object.values(n.pseudos).some((v) => v.paint.length);
-		const seen = (n) => n.box.w >= 2 && n.box.h >= 2 && n.op > 0.04;
+		const seen = (n) => (relaxed ? n.raw.w >= 2 && n.raw.h >= 2 : n.box.w >= 2 && n.box.h >= 2 && n.op > 0.04);
 		const surface = (n) => [...n.paint, ...Object.values(n.pseudos).flatMap((v) => v.paint)].some((p) => p.k === 'fill' || p.k === 'border' || p.k === 'shadow' || p.k === 'gradient' || p.k === 'image' || p.k === 'media');
 		const P = nodes.filter((n) => paints(n) && seen(n));
 		const under = (n) => { const out = []; const walk = (x) => { for (const c of kids.get(x.i) ?? []) { out.push(c); walk(c); } }; walk(n); return out; };
@@ -176,7 +185,7 @@ export function spKit() {
 		// a big one: its visual pieces (a panel, a card, a picture), each with everything it holds, the biggest first
 		const root = nodes[0];
 		// the first surfaces under x (a panel, a card, a picture at least 40×40), not looking inside them
-		const top = (x) => { const out = []; const find = (y) => { for (const c of kids.get(y.i) ?? []) { if (c.op <= 0.04 || c.box.w < 2 || c.box.h < 2) continue; if (surface(c) && c.box.w * c.box.h >= 1600) out.push(c); else find(c); } }; find(x); return out; };
+		const top = (x) => { const out = []; const find = (y) => { for (const c of kids.get(y.i) ?? []) { if (!seen(c)) continue; if (surface(c) && c.box.w * c.box.h >= 1600) out.push(c); else find(c); } }; find(x); return out; };
 		let pieces = top(root);
 		for (let k = 0; k < 4 && pieces.length === 1; k++) { const inner = top(pieces[0]); if (inner.length < 2) break; pieces = inner; }
 		if (!pieces.length) pieces = P.slice().sort((a, b) => b.box.w * b.box.h - a.box.w * a.box.h).slice(0, max - 1);
@@ -240,5 +249,10 @@ export function spKit() {
 		}
 		return rows;
 	}
-	return { anatomyOf, groupLayers, groupSpecs, nameOf, specsOf, fileName, deg, blurOf, colorOf, slugOf };
+	/** Why the layers came out as they did, for diagnosis. */
+	function why(nodes) {
+		const paints = (n) => n.paint.length || Object.values(n.pseudos).some((v) => v.paint.length);
+		return { nodes: nodes.length, painting: nodes.filter(paints).length, visible: nodes.filter((n) => paints(n) && n.box.w >= 2 && n.box.h >= 2 && n.op > 0.04).length, zeroOpacity: nodes.filter((n) => n.op <= 0.04).length, clippedAway: nodes.filter((n) => paints(n) && (n.box.w < 2 || n.box.h < 2) && n.raw.w >= 2).length, root: nodes[0] && { box: nodes[0].box, op: nodes[0].op } };
+	}
+	return { why, anatomyOf, groupLayers, groupSpecs, nameOf, specsOf, fileName, deg, blurOf, colorOf, slugOf };
 }

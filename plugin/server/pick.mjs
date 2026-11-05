@@ -157,6 +157,7 @@ export async function processBatch(batch, baseDir, { log = () => {} } = {}) {
 					// taken apart in the page already: the copy is that snapshot, exactly what they saw
 					const file = path.join(dir, 'component.html');
 					writeFileSync(file, `<!doctype html>\n<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">\n<title>${p.kind} from ${host}</title>\n<!-- Taken by site-prompt from ${batch.url} as it was on screen: every computed style that differs from the browser default. -->\n<style>\n${inst.fonts.join('\n')}\nhtml,body{margin:0}\nbody{min-height:100vh;display:grid;place-items:center;background:${inst.bg};padding:24px;box-sizing:border-box}\n${inst.rules.join('\n')}\n</style></head>\n<body>\n${inst.html}\n</body></html>\n`);
+					writeFileSync(path.join(dir, 'instant.json'), JSON.stringify({ size: inst.size, bg: inst.bg, why: inst.why, layers: inst.layers }, null, 1));
 					const W = Math.round(inst.size.w), H = Math.round(inst.size.h);
 					r = { file, outDir: dir, where: 'page', snap: { nodes: (inst.html.match(/class="c\d+/g) ?? []).length, tag: d.tag, text: d.text }, states: {}, stateRules: [], code: { html: inst.html, css: [...inst.fonts, ...inst.rules].join('\n'), fonts: [] }, faces: inst.fonts.length, keyframes: 0, ssim: null, diff: null, size: { original: [W, H], clone: [W, H], ok: true }, sheet: null, unchecked: true, mobile: null };
 				}

@@ -91,7 +91,15 @@ export function viewer() {
 		.bar{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;padding:6px;border-radius:13px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0) 40%),var(--panel);box-shadow:0 0 0 1px var(--line),0 0 0 1px rgba(0,0,0,.55),0 24px 48px -12px rgba(0,0,0,.6);opacity:0;transition:opacity .4s ease .55s}
 		.on .bar{opacity:1}
 		.bar label{display:flex;align-items:center;gap:8px;padding:0 8px 0 10px;font-size:12px;color:var(--muted)}
-		.bar input{width:110px;accent-color:#3d7bff}
+		.bar input{-webkit-appearance:none;appearance:none;width:116px;height:18px;background:transparent;cursor:pointer;--v:60%}
+		.bar input::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(90deg,var(--blue2) var(--v),rgba(255,255,255,.12) var(--v));box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
+		.bar input::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;background:#f7f8f8;box-shadow:0 0 0 1px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.45);transition:transform .12s ease}
+		.bar input:hover::-webkit-slider-thumb{transform:scale(1.12)}
+		.bar input:focus-visible{outline:none}
+		.bar input:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 3px rgba(61,123,255,.45),0 2px 6px rgba(0,0,0,.45)}
+		.bar input::-moz-range-track{height:4px;border-radius:2px;background:rgba(255,255,255,.12)}
+		.bar input::-moz-range-progress{height:4px;border-radius:2px;background:var(--blue2)}
+		.bar input::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:#f7f8f8}
 		.bar .sep{width:1px;height:18px;background:var(--line);margin:0 2px}
 		.bar kbd{font:500 10.5px/1 var(--mono);color:var(--muted);padding:3px 5px;border-radius:4px;box-shadow:inset 0 0 0 1px var(--line)}
 		.copy{position:absolute;left:0;top:0;transform:translateZ(.5px);pointer-events:none}
@@ -258,7 +266,7 @@ export function viewer() {
 	canvas.addEventListener('pointermove', (e) => { if (!drag) return; rz = drag.rz + (e.clientX - drag.x) * 0.3; rx = Math.max(0, Math.min(85, drag.rx - (e.clientY - drag.y) * 0.3)); flat = false; apply(); });
 	canvas.addEventListener('pointerup', () => { drag = null; canvas.classList.remove('drag'); stack.classList.remove('fast'); });
 	const range = $('input[type=range]');
-	range.addEventListener('input', () => { spread = range.value / 100; flat = false; apply(); });
+	range.addEventListener('input', () => { spread = range.value / 100; range.style.setProperty('--v', range.value + '%'); flat = false; apply(); });
 	const flatBtn = $('[data-a=flat]');
 	flatBtn.addEventListener('click', () => { flat = !flat; flatBtn.textContent = flat ? 'Spread out' : 'Flatten'; apply(); });
 	$('[data-a=all]').addEventListener('click', (e) => { const t = V.all || V.layers.map((l) => l.prompt).filter(Boolean).join('\n\n---\n\n'); if (t) copy(t, e.currentTarget, 'Copy whole thing'); else { e.currentTarget.textContent = 'Writing prompt…'; setTimeout(() => (e.currentTarget.textContent = 'Copy whole thing'), 1400); } });
@@ -299,6 +307,8 @@ export function instant(el, title) {
 	if (!snap) return null;
 	const a = K.anatomyOf(el, (e) => { const v = e.getAttribute('data-sp-n'); return v == null ? null : +v; });
 	const groups = K.groupLayers(a.nodes, []);
+	const why = K.why(a.nodes);
+	console.debug('[site-prompt] break it down', why, groups.map((g) => g.name));
 	const fonts = [];
 	for (const sh of document.styleSheets) {
 		let rules = null;
@@ -314,5 +324,5 @@ export function instant(el, title) {
 	const V = { el, title, html: snap.html, rules: snap.rules, bg, size: { w: r.width, h: r.height }, offset: { x: 0, y: 0 }, clip: { w: r.width, h: r.height }, layers };
 	window.__spView = V;
 	window.__spViewer();
-	return { html: snap.html, rules: snap.rules, fonts: [...new Set(fonts)], bg, size: V.size, layers: layers.map(({ specs, ...l }) => l) };
+	return { html: snap.html, rules: snap.rules, fonts: [...new Set(fonts)], bg, size: V.size, why, layers: layers.map(({ specs, ...l }) => l) };
 }
