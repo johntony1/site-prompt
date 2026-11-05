@@ -40,7 +40,7 @@ export function viewer() {
 		.on .plane .slab,.on .plane .edge{opacity:1}
 		.plane .slab{background:var(--slab);box-shadow:0 0 0 1px var(--slabline),0 1px 0 #fff inset}
 		.plane .edge{transform:translateZ(-7px);background:var(--edge,#c9c9cf);box-shadow:0 0 0 1px var(--edgeline,#a1a1aa),0 30px 50px -20px rgba(0,0,0,.6)}
-		.plane img{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;transform:translateZ(.5px)}
+		.plane > img{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;transform:translateZ(.5px)}
 		.plane .tag{position:absolute;left:10px;top:10px;height:20px;padding:0 7px;border-radius:6px;background:#fff;color:#71717a;font:600 10.5px/20px var(--mono);box-shadow:0 0 0 1px #d4d4d8;opacity:0;transform:translateZ(1px);transition:opacity .3s ease}
 		.on .plane .tag{opacity:1}
 		.pin{position:absolute;width:1px;height:1px}
@@ -57,7 +57,7 @@ export function viewer() {
 		.was span{display:block;font:500 10.5px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
 		.thumb{position:relative;width:220px;border-radius:10px;overflow:hidden;background:var(--slab,#fff);box-shadow:0 0 0 1px var(--line2),0 12px 30px -12px rgba(0,0,0,.6)}
 		.tin{position:absolute;left:0;top:0;transform-origin:0 0}
-		.tin img{position:absolute;left:0;top:0}
+		.tin > img{position:absolute;left:0;top:0}
 		.tin .whole *,.tin .whole *::before,.tin .whole *::after{transition:none!important;animation-name:none!important}
 		.labels{position:fixed;left:32px;display:flex;flex-direction:column;gap:2px;opacity:0;transition:opacity .4s ease .45s}
 		.on .labels{opacity:1}
@@ -65,6 +65,9 @@ export function viewer() {
 		.label b{font-weight:500;color:var(--faint);transition:color .15s ease}
 		.label:hover,.label.hot{color:var(--ink)}
 		.label.hot b{color:var(--blue2)}
+		.label{cursor:pointer}
+		.label.kept{color:var(--ink)}
+		.label.kept:after{content:'';width:5px;height:5px;border-radius:50%;background:var(--blue2);margin-left:4px}
 		svg.lines{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
 		svg.lines path{fill:none;stroke:var(--ink2);stroke-width:1}
 		svg.lines path.card{stroke:var(--muted);stroke-dasharray:3 3}
@@ -76,6 +79,13 @@ export function viewer() {
 		.spec .ch i{font:600 10.5px/20px var(--mono);font-style:normal;height:20px;padding:0 7px;border-radius:6px;background:var(--blue);color:#fff}
 		.spec .ch b{font-size:14px;font-weight:620;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 		.spec .rows{padding:2px 16px 8px}
+		.spec .body{max-height:min(560px, calc(100vh - 200px));overflow:auto}
+		.spec .sec small{display:block;padding:10px 16px 2px;font:500 10px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+		.spec .why{margin:0 12px 6px;padding:10px 12px;border-radius:10px;background:rgba(61,123,255,.08);box-shadow:inset 0 0 0 1px rgba(61,123,255,.18)}
+		.spec .why p{font-size:12.5px;line-height:1.5;color:var(--ink2)}
+		.spec .why p+p{margin-top:6px}
+		.spec .chips{display:flex;flex-wrap:wrap;gap:5px;padding:6px 16px 10px}
+		.spec .chips span{font-size:11.5px;color:var(--ink2);padding:3px 8px;border-radius:6px;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px var(--line)}
 		.spec .row{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:30px;font-size:12.5px;border-top:1px solid rgba(255,255,255,.05)}
 		.spec .row:first-child{border-top:0}
 		.spec .row span{color:var(--muted);white-space:nowrap}
@@ -213,25 +223,25 @@ export function viewer() {
 			setTimeout(() => { planes.forEach((p) => (p.style.transitionDelay = '')); setHot(n - 1); }, 1000 + n * 40);
 		}));
 	});
-	// what was moving keeps moving: the page's own keyframes and timing, resumed where they were
-	if (V.html && V.anims?.length) {
-		const back = (o) => JSON.parse(JSON.stringify(o), (k, v) => (v === 'Infinity' ? Infinity : v));
-		for (const x of V.anims) {
-			for (const e of root.querySelectorAll(`.c${x.i}`)) {
-				try {
-					const an = e.animate(back(x.keyframes), { ...back(x.timing), fill: x.timing.fill === 'none' ? 'auto' : x.timing.fill });
-					an.playbackRate = x.rate || 1;
-					if (x.currentTime != null) an.currentTime = x.currentTime + (performance.now() - (x.at ?? performance.now())) * (x.rate || 1);
-				} catch {}
+	// what moves on the page moves here: mirrored from the real element every frame
+	const mirrors = (V.mirror ?? []).map((m) => ({ el: m.el, copies: [...root.querySelectorAll(`.c${m.i}`)] })).filter((m) => m.copies.length);
+	if (mirrors.length) {
+		const step = () => {
+			if (!host.isConnected) return;
+			for (const m of mirrors) {
+				const cs = getComputedStyle(m.el);
+				for (const c of m.copies) { c.style.transform = cs.transform; c.style.opacity = cs.opacity; c.style.filter = cs.filter; c.style.translate = cs.translate; c.style.scale = cs.scale; c.style.rotate = cs.rotate; }
 			}
-		}
+			requestAnimationFrame(step);
+		};
+		requestAnimationFrame(step);
 	}
 	// the preview: the whole pick, scaled into 220 px
 	{
 		const thumb = $('.thumb'), tin = $('.tin'), W = V.html ? V.size.w : V.clip.w, H = V.html ? V.size.h : V.clip.h, k = Math.min(220 / W, 150 / H);
 		Object.assign(thumb.style, { width: Math.round(W * k) + 'px', height: Math.round(H * k) + 'px' });
 		Object.assign(tin.style, { width: W + 'px', height: H + 'px', transform: `scale(${k})` });
-		tin.querySelectorAll('img').forEach((im) => Object.assign(im.style, { width: W + 'px', height: H + 'px' }));
+		tin.querySelectorAll(':scope > img').forEach((im) => Object.assign(im.style, { width: W + 'px', height: H + 'px' }));
 	}
 	// the labels: a column on the left, centred
 	const h0 = labelsBox.getBoundingClientRect().height;
@@ -249,8 +259,18 @@ export function viewer() {
 	};
 	const showCard = (k) => {
 		const l = V.layers[k];
+		const rowsOf = (list) => list.map((row) => `<div class="row${/recording/.test(row.v) ? ' wait' : ''}"><span>${esc(row.k)}</span><em>${swatch(row)}<u title="${esc(row.v)}">${esc(row.v)}</u></em></div>`).join('');
+		const isMotion = (row) => /^(Moves|Motion|Loops|Plays|Animat|Moving)/.test(row.k);
+		const sect = (name, list) => (list?.length ? `<div class="sec"><small>${name}</small><div class="rows">${rowsOf(list)}</div></div>` : '');
 		card.innerHTML = `<div class="ch"><i>${pad2(l.n)}</i><b>${esc(l.name)}</b></div>
-			<div class="rows">${l.specs.map((row) => `<div class="row${/recording/.test(row.v) ? ' wait' : ''}"><span>${esc(row.k)}</span><em>${swatch(row)}<u title="${esc(row.v)}">${esc(row.v)}</u></em></div>`).join('')}</div>
+			<div class="body">
+			${l.why?.length ? `<div class="why">${l.why.map((w) => `<p>${esc(w)}</p>`).join('')}</div>` : ''}
+			${sect('Look', l.specs.filter((r) => !isMotion(r)))}
+			${sect('Type', l.type)}
+			${sect('Layout', l.layout)}
+			${l.holds?.length ? `<div class="sec"><small>Holds</small><div class="chips">${l.holds.map((h) => `<span>${esc(h)}</span>`).join('')}</div></div>` : ''}
+			${sect('Motion', l.specs.filter(isMotion))}
+			</div>
 			<div class="acts"><button class="b p" data-c="prompt" ${l.prompt ? '' : 'disabled style="opacity:.55"'}>${l.prompt ? 'Copy prompt' : 'Writing prompt…'}</button><button class="b" data-c="css" ${l.css ? '' : 'disabled style="opacity:.55"'}>Copy CSS</button></div>`;
 		card.querySelector('[data-c=prompt]').addEventListener('click', (e) => V.layers[k].prompt && copy(V.layers[k].prompt, e.currentTarget, 'Copy prompt'));
 		card.querySelector('[data-c=css]').addEventListener('click', (e) => V.layers[k].css && copy(V.layers[k].css, e.currentTarget, 'Copy CSS'));
@@ -280,7 +300,7 @@ export function viewer() {
 		const h = card.getBoundingClientRect().height || 320;
 		card.style.top = Math.max(24, Math.min(innerHeight - h - 90, pr.top - h / 2)) + 'px';
 	};
-	labels.forEach((x) => x.addEventListener('mouseenter', () => setHot(+x.dataset.k)));
+	labels.forEach((x) => { x.addEventListener('mouseenter', () => { if (pinned == null) setHot(+x.dataset.k); }); x.addEventListener('click', () => { pinned = +x.dataset.k; labels.forEach((y) => y.classList.toggle('kept', y === x)); setHot(pinned); }); });
 	// over the stack: the top-most plane under the pointer (a projected plane is a quad: test inside its corners)
 	const inside = (q, x, y) => { let s = 0; for (let i = 0; i < 4; i++) { const a = q[i], b = q[(i + 1) % 4]; const c = (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]); if (c !== 0) { if (s && Math.sign(c) !== s) return false; s = Math.sign(c); } } return true; };
 	const corners = (p) => {
@@ -288,14 +308,25 @@ export function viewer() {
 		const W = V.clip.w, H = V.clip.h, b = stage.getBoundingClientRect(), ox = V.offset.x + W / 2, oy = V.offset.y + H / 2, P = 2800;
 		return [[0, 0], [W, 0], [W, H], [0, H]].map(([x, y]) => { const pt = m.transformPoint(new DOMPoint(x - W / 2, y - H / 2, 0)); const ex = pt.x + ox, ey = pt.y + oy; const cxs = b.width / 2, cys = b.height / 2; const f = P / (P - pt.z); return [b.left + cxs + (ex - cxs) * f, b.top + cys + (ey - cys) * f]; });
 	};
+	let pinned = null;
 	canvas.addEventListener('mousemove', (e) => {
-		if (drag) return;
+		if (drag || pinned != null) return;
 		for (let k = planes.length - 1; k >= 0; k--) if (inside(corners(planes[k]), e.clientX, e.clientY)) { setHot(k); return; }
 	});
 	let drag = null;
 	canvas.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, rx, rz, ry }; canvas.classList.add('drag'); stack.classList.add('fast'); canvas.setPointerCapture(e.pointerId); });
 	canvas.addEventListener('pointermove', (e) => { if (!drag) return; if (Math.abs(drag.ry) > 5) { ry = Math.max(-80, Math.min(80, drag.ry + (e.clientX - drag.x) * 0.3)); rx = Math.max(-40, Math.min(85, drag.rx - (e.clientY - drag.y) * 0.3)); } else { rz = drag.rz + (e.clientX - drag.x) * 0.3; rx = Math.max(0, Math.min(85, drag.rx - (e.clientY - drag.y) * 0.3)); } flat = false; apply(); });
-	canvas.addEventListener('pointerup', () => { drag = null; canvas.classList.remove('drag'); stack.classList.remove('fast'); });
+	canvas.addEventListener('pointerup', (e) => {
+		const moved = drag && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 4;
+		drag = null; canvas.classList.remove('drag'); stack.classList.remove('fast');
+		if (moved) return;
+		// a click: keep the layer under the pointer, or let go on empty space
+		let k = null;
+		for (let j = planes.length - 1; j >= 0; j--) if (inside(corners(planes[j]), e.clientX, e.clientY)) { k = j; break; }
+		pinned = k;
+		labels.forEach((x) => x.classList.toggle('kept', +x.dataset.k === k));
+		if (k != null) setHot(k);
+	});
 	const ANGLES = { top: { ry: 0, rx: 55, rz: -40 }, front: { ry: -38, rx: 8, rz: 0 } };
 	const views = [...root.querySelectorAll('.vb')];
 	const setView = (name) => {
@@ -348,26 +379,24 @@ export function viewer() {
  * In the page, the moment Break it down is pressed: the pick exactly as it is on screen now (read-only), grouped into
  * layers, and the view opened on it. Returns what the server needs to build the lesson from the same picture.
  */
-export function instant(el, title) {
+export async function instant(el, title) {
 	const K = window.__spKit;
 	if (!K || !window.__spSnap || !el) return null;
 	el.setAttribute('data-sp-picked', '1');
 	let snap = null;
 	try { snap = window.__spSnap('[data-sp-picked]'); } finally { el.removeAttribute('data-sp-picked'); }
 	if (!snap) return null;
+	const live = new Map([el, ...el.querySelectorAll('[data-sp-n]')].map((e) => [+e.getAttribute('data-sp-n'), e]));
 	const a = K.anatomyOf(el, (e) => { const v = e.getAttribute('data-sp-n'); return v == null ? null : +v; });
-	// what is moving right now (a background animation, a loop): it keeps playing in the view instead of being torn apart
-	const anims = [];
-	const plain = (o) => JSON.parse(JSON.stringify(o, (k, v) => (v === Infinity ? 'Infinity' : v)));
-	for (const e of [el, ...el.querySelectorAll('[data-sp-n]')]) {
-		for (const an of e.getAnimations()) {
-			if (an.effect?.target !== e || an.constructor.name === 'CSSTransition' || !/running|paused/.test(an.playState)) continue;
-			try {
-				const t = an.effect.getTiming();
-				anims.push({ i: +e.getAttribute('data-sp-n'), name: an.animationName || (an.id ? an.id : 'animate()'), keyframes: plain(an.effect.getKeyframes().map(({ computedOffset, ...k }) => k)), timing: plain({ duration: t.duration, delay: t.delay, endDelay: t.endDelay, iterations: t.iterations, direction: t.direction, easing: t.easing, fill: t.fill }), currentTime: an.currentTime, rate: an.playbackRate, at: performance.now() });
-			} catch {}
-		}
-	}
+	// what is moving right now, whatever moves it (CSS, Web Animations, a script): two frames apart, what changed
+	const look = (e) => { const c = getComputedStyle(e); return `${c.transform}|${c.opacity}|${c.filter}|${c.clipPath}|${c.translate}|${c.scale}|${c.rotate}`; };
+	const before = new Map([...live].map(([i, e]) => [i, look(e)]));
+	await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 30))));
+	const moving = new Set();
+	for (const [i, e] of live) if (i !== 0 && before.get(i) !== look(e)) moving.add(i);
+	for (const [i, e] of live) if (i !== 0 && e.getAnimations().some((an) => an.effect?.target === e && an.constructor.name !== 'CSSTransition' && an.playState === 'running')) moving.add(i);
+	// a moving part's own moving children move with it: keep the top-most
+	const movingTop = new Set([...moving].filter((i) => { for (let x = live.get(i)?.parentElement; x && x !== el; x = x.parentElement) { const j = x.getAttribute('data-sp-n'); if (j != null && moving.has(+j)) return false; } return true; }));
 	// what can actually be seen: a part entirely covered by others (an icon behind a card) is not torn out of the picture
 	const R = el.getBoundingClientRect();
 	const covered = new Set();
@@ -376,8 +405,8 @@ export function instant(el, title) {
 	document.head.appendChild(pe);
 	try {
 		for (const n of a.nodes) {
-			if (n === a.nodes[0] || !(n.paint.length || Object.values(n.pseudos).some((v) => v.paint.length)) || n.box.w < 2 || n.box.h < 2) continue;
-			const e = el.querySelector(`[data-sp-n="${n.i}"]`);
+			if (n === a.nodes[0] || moving.has(n.i) || !(n.paint.length || Object.values(n.pseudos).some((v) => v.paint.length)) || n.box.w < 2 || n.box.h < 2) continue;
+			const e = live.get(n.i);
 			if (!e) continue;
 			let hits = 0;
 			for (let gy = 1; gy <= 4 && !hits; gy++) for (let gx = 1; gx <= 4 && !hits; gx++) {
@@ -389,27 +418,91 @@ export function instant(el, title) {
 			if (!hits) covered.add(n.i);
 		}
 	} finally { pe.remove(); }
-	const moving = new Set(anims.filter((x) => { const d = x.timing.duration; return x.timing.iterations === 'Infinity' || (typeof d === 'number' && d > 0); }).map((x) => x.i));
-	const seenNodes = a.nodes.map((n) => (covered.has(n.i) && !moving.has(n.i) ? { ...n, paint: [], pseudos: {} } : n));
-	const groups = K.groupLayers(seenNodes, [], 12, moving);
+	const seenNodes = a.nodes.map((n) => (covered.has(n.i) ? { ...n, paint: [], pseudos: {} } : n));
+	let groups = K.groupLayers(seenNodes, [], 12, movingTop);
+	// background motion sits low in the stack, just above the panel
+	const mv = groups.find((g) => g.moving);
+	if (mv) { groups = groups.filter((g) => g !== mv); groups.splice(groups[0]?.name === 'Panel' ? 1 : 0, 0, mv); }
 	const why = { ...K.why(a.nodes), covered: covered.size, moving: moving.size };
 	console.debug('[site-prompt] break it down', why, groups.map((g) => g.name));
+	// the details a card needs beyond its look: type, layout, what it holds, why it works
+	const rgb = (c) => (String(c).match(/[\d.]+/g) ?? []).map(Number);
+	const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+	const bgOf = (e) => { for (let x = e; x; x = x.parentElement) { const c = getComputedStyle(x).backgroundColor; const v = rgb(c); if (v.length >= 3 && (v[3] ?? 1) > 0.5) return v; } return [255, 255, 255]; };
+	const detail = (g) => {
+		const e = live.get(g.i);
+		if (!e) return {};
+		const cs = getComputedStyle(e);
+		const out = {};
+		const textEl = g.members.map((i) => live.get(i)).find((m) => m && [...m.childNodes].some((t) => t.nodeType === 3 && t.textContent.trim())) || ([...e.childNodes].some((t) => t.nodeType === 3 && t.textContent.trim()) ? e : [...e.querySelectorAll('*')].find((m) => [...m.childNodes].some((t) => t.nodeType === 3 && t.textContent.trim())));
+		if (textEl) {
+			const t = getComputedStyle(textEl);
+			const fg = rgb(t.color), back = bgOf(textEl);
+			const L1 = lum(fg), L2 = lum(back), ratio = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
+			out.type = [
+				{ k: 'Font', v: t.fontFamily.split(',')[0].replace(/["']/g, '') },
+				{ k: 'Size / line', v: `${t.fontSize} / ${t.lineHeight}` },
+				{ k: 'Weight', v: t.fontWeight },
+				...(t.letterSpacing !== 'normal' && t.letterSpacing !== '0px' ? [{ k: 'Tracking', v: t.letterSpacing }] : []),
+				{ k: 'Colour', v: t.color.replace(/\s+/g, ''), sw: t.color },
+				{ k: 'Contrast', v: `${ratio.toFixed(1)} : 1 ${ratio >= 4.5 ? '(AA)' : ratio >= 3 ? '(AA large)' : '(low)'}` },
+			];
+		}
+		const flex = /flex/.test(cs.display), grid = /grid/.test(cs.display);
+		const pad = [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft];
+		const padV = pad.every((x) => x === pad[0]) ? pad[0] : pad[0] === pad[2] && pad[1] === pad[3] ? `${pad[0]} ${pad[1]}` : pad.join(' ');
+		out.layout = [
+			{ k: 'Layout', v: flex ? `flex, ${cs.flexDirection}` : grid ? `grid, ${cs.gridTemplateColumns.split(' ').length} column${cs.gridTemplateColumns.split(' ').length > 1 ? 's' : ''}` : cs.display },
+			...((flex || grid) && cs.rowGap !== 'normal' && cs.rowGap !== '0px' ? [{ k: 'Gap', v: cs.rowGap === cs.columnGap ? cs.rowGap : `${cs.rowGap} ${cs.columnGap}` }] : []),
+			...(padV !== '0px' ? [{ k: 'Padding', v: padV }] : []),
+			...(flex || grid ? [{ k: 'Align', v: `${cs.alignItems}${cs.justifyContent !== 'normal' ? `, ${cs.justifyContent}` : ''}` }] : []),
+			...(cs.position !== 'static' ? [{ k: 'Position', v: `${cs.position}${cs.zIndex !== 'auto' ? `, z ${cs.zIndex}` : ''}` }] : []),
+		];
+		const words = [...new Set(g.members.map((i) => live.get(i)).filter(Boolean).flatMap((m) => [...m.childNodes].filter((t) => t.nodeType === 3).map((t) => t.textContent.trim())).filter((t) => /[A-Za-z0-9]{2}/.test(t)))];
+		if (g.sub && words.length) out.holds = words.slice(0, 5);
+		// why it works: the technique, in one line each
+		const W = [];
+		const sh = cs.boxShadow === 'none' ? [] : cs.boxShadow.split(/,(?![^(]*\))/).map((x) => x.trim()).filter((x) => !/^rgba\([^)]*,\s*0\)/.test(x));
+		const ring = sh.find((x) => /\b0px 0px 0px 1px\b/.test(x));
+		if (ring && /inset/.test(ring)) W.push('Its edge is an inset 1px shadow, so it has a border that takes no space and never shifts the layout.');
+		else if (ring) W.push('A 1px shadow ring stands in for a border: it draws the edge without adding to the size.');
+		const outer = sh.filter((x) => !/inset/.test(x) && !/\b0px 0px 0px 1px\b/.test(x));
+		if (outer.length >= 3) W.push(`${outer.length} shadows stacked: tight ones draw the contact edge, wide soft ones (negative spread) give lift without a heavy halo.`);
+		if (/gradient/.test(cs.backgroundImage) && sh.some((x) => /inset/.test(x) && /255, 255, 255/.test(x))) W.push('A vertical gradient plus a 1px white inner highlight makes it look slightly convex, like a physical key.');
+		const bw = parseFloat(cs.borderTopWidth) || 0;
+		if (bw > 1 && e.parentElement) { const sib = [...e.parentElement.children].filter((x) => x !== e && x.tagName === e.tagName).map((x) => parseFloat(getComputedStyle(x).borderTopWidth) || 0); if (sib.length && sib.every((x) => x < bw)) W.push(`Selected: shown by a heavier ${bw}px border in a darker colour, not by fill or size, so nothing around it moves.`); }
+		if (cs.overflow !== 'visible' && parseFloat(cs.borderTopLeftRadius) > 0) W.push('It clips everything inside to its rounded corners.');
+		if (cs.maskImage && cs.maskImage !== 'none' && /gradient/.test(cs.maskImage)) W.push('A gradient mask fades it out instead of cutting it off.');
+		if (cs.aspectRatio && cs.aspectRatio !== 'auto') W.push(`Locked to an aspect ratio (${cs.aspectRatio}), so it scales without stretching.`);
+		if (cs.zIndex !== 'auto' && +cs.zIndex > 0) W.push(`z-index ${cs.zIndex} keeps it above what floats behind it.`);
+		const op = parseFloat(cs.opacity);
+		if (op > 0 && op < 0.5) W.push(`Kept faint (opacity ${op}) so it stays in the background.`);
+		if (g.moving) W.push('It moves on its own on the page; here it plays live, in step with the page.');
+		out.why = W.slice(0, 3);
+		return out;
+	};
 	const fonts = [];
 	for (const sh of document.styleSheets) {
 		let rules = null;
 		try { rules = sh.cssRules; } catch { continue; }
 		for (const r of rules) if (r.constructor.name === 'CSSFontFaceRule' && snap.families.some((f) => r.cssText.includes(f))) fonts.push(r.cssText.replace(/url\(["']?([^"')]+)["']?\)/g, (m, u) => { try { return `url("${new URL(u, sh.href || location.href).href}")`; } catch { return m; } }));
 	}
+	const details = groups.map(detail);
 	document.querySelectorAll('[data-sp-n]').forEach((e) => e.removeAttribute('data-sp-n'));
 	let bg = null;
 	for (let x = el; x && !bg; x = x.parentElement) { const c = getComputedStyle(x).backgroundColor; if (c && c !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(c)) bg = c; }
 	bg ??= '#ffffff';
 	const r = el.getBoundingClientRect();
-	const timingRows = (list) => list.slice(0, 5).map((x) => ({ k: x.name === 'animate()' ? 'Animates' : `Animation "${x.name}"`, v: `${typeof x.timing.duration === 'number' ? Math.round(x.timing.duration) + ' ms' : x.timing.duration}${x.timing.delay ? `, after ${Math.round(x.timing.delay)} ms` : ''}, ${x.timing.iterations === 'Infinity' ? 'loops' : x.timing.iterations > 1 ? x.timing.iterations + ' times' : 'once'}${x.timing.easing && x.timing.easing !== 'linear' ? `, ${x.timing.easing}` : ''}` }));
 	const hiddenNote = covered.size ? { k: 'Hidden behind others', v: `${covered.size} ${covered.size > 1 ? 'parts' : 'part'}` } : null;
-	const layers = groups.map((g, k) => ({ n: k + 1, i: g.i, sub: g.sub, members: g.members, name: g.name, box: g.box, moving: !!g.moving, force: !g.moving && g.n.fx.opacity === '0', specs: g.moving ? [{ k: 'Plays', v: 'live, as on the page' }, ...timingRows(anims.filter((x) => g.members.includes(x.i) || moving.has(x.i)))] : [...K.groupSpecs({ ...g.n, sub: g.sub, members: g.members }, undefined), ...(k === 0 && hiddenNote ? [hiddenNote] : [])] }));
-	const V = { el, title, anims, html: snap.html, rules: snap.rules, bg, size: { w: r.width, h: r.height }, offset: { x: 0, y: 0 }, clip: { w: r.width, h: r.height }, layers };
+	const layers = groups.map((g, k) => ({
+		n: k + 1, i: g.i, sub: g.sub, members: g.members, name: g.name, box: g.box, moving: !!g.moving, force: !g.moving && g.n.fx.opacity === '0',
+		specs: g.moving ? [{ k: 'Plays', v: 'live, in step with the page' }, { k: 'Moving parts', v: String(movingTop.size) }] : [...K.groupSpecs({ ...g.n, sub: g.sub, members: g.members }, undefined), ...(k === 0 && hiddenNote ? [hiddenNote] : [])],
+		...details[k],
+	}));
+	// the view mirrors the moving parts from the page every frame (the page keeps animating underneath)
+	const mirror = [...moving].map((i) => ({ i, el: live.get(i) })).filter((m) => m.el);
+	const V = { el, title, mirror, html: snap.html, rules: snap.rules, bg, size: { w: r.width, h: r.height }, offset: { x: 0, y: 0 }, clip: { w: r.width, h: r.height }, layers };
 	window.__spView = V;
 	window.__spViewer();
-	return { html: snap.html, rules: snap.rules, fonts: [...new Set(fonts)], bg, size: V.size, why, anims: anims.map(({ at, ...x }) => x), layers: layers.map(({ specs, ...l }) => l) };
+	return { html: snap.html, rules: snap.rules, fonts: [...new Set(fonts)], bg, size: V.size, why, layers: layers.map(({ specs, type, layout, holds, why: w, ...l }) => l) };
 }

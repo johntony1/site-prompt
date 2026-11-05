@@ -201,7 +201,24 @@ export function spKit() {
 		// the first surfaces under x (a panel, a card, a picture at least 40×40), not looking inside them
 		const top = (x) => { const out = []; const find = (y) => { for (const c of kids.get(y.i) ?? []) { if (!seen(c)) continue; if (surface(c) && c.box.w * c.box.h >= 1600) out.push(c); else find(c); } }; find(x); return out; };
 		let pieces = top(root);
-		for (let k = 0; k < 4 && pieces.length === 1; k++) { const inner = top(pieces[0]); if (inner.length < 2) break; pieces = inner; }
+		const chain = []; // a card that holds everything keeps its own slab while we look inside it
+		for (let k = 0; k < 4 && pieces.length === 1; k++) { const inner = top(pieces[0]); if (inner.length < 2) break; chain.push(pieces[0]); pieces = inner; }
+		{
+			// distinct pieces that fit: each its own layer, with what it holds; containers keep their own slab
+			const room = max - (P.includes(root) ? 1 : 0) - chain.length - 1;
+			const R1 = root.box, diag1 = Math.hypot(R1.w, R1.h) / 2 || 1;
+			if (pieces.length && pieces.length <= room) {
+				const inside1 = (x) => [x, ...under(x)].filter((m) => P.includes(m));
+				const gs = [];
+				if (P.includes(root)) gs.push({ n: root, members: [root], name: 'Panel' });
+				const claimed = new Set([root]);
+				for (const c of chain) if (P.includes(c)) { gs.push({ n: c, members: [c], name: groupName({ n: c, members: inside1(c) }, files) }); claimed.add(c); }
+				for (const x of pieces) { const mem = inside1(x).filter((m) => !claimed.has(m)); mem.forEach((m) => claimed.add(m)); if (mem.length) gs.push({ n: x, members: mem }); }
+				const loose = P.filter((m) => !claimed.has(m));
+				if (loose.length) gs.push({ n: loose[0], members: loose });
+				return finish(gs, true);
+			}
+		}
 		if (!pieces.length) pieces = P.slice().sort((a, b) => b.box.w * b.box.h - a.box.w * a.box.h).slice(0, max - 1);
 		const R0 = root.box, diag = Math.hypot(R0.w, R0.h) / 2 || 1;
 		const weight = (x) => x.box.w * x.box.h * x.op * Math.max(0.15, 1 - Math.hypot(x.box.x + x.box.w / 2 - R0.w / 2, x.box.y + x.box.h / 2 - R0.h / 2) / diag);

@@ -167,12 +167,12 @@ export function overlay() {
 			if (e.key === 'Escape') { e.preventDefault(); if (open) closePop(); else setPicking(!picking); return; }
 			if (picking && !open && e.key === 'ArrowUp' && cur?.parentElement && cur.parentElement !== document.body) { e.preventDefault(); cur = cur.parentElement; show(); }
 		}, true);
-		const send = (a) => {
+		const send = async (a) => {
 			closePop();
 			if (!picks.length) return;
 			// Break it down: taken apart right here, at once, from what is on screen; the agent builds the lesson after
 			let inst = null;
-			if (a === 'learn') { const p0 = picks.find((p) => document.contains(p.el)); try { inst = p0 && window.__spInstant?.(p0.el, `${NAME[p0.kind]}, ${location.host.replace(/^www\./, '')}`); if (inst) inst.n = p0.n; } catch (e) { inst = null; } }
+			if (a === 'learn') { const p0 = picks.find((p) => document.contains(p.el)); try { inst = p0 && await window.__spInstant?.(p0.el, `${NAME[p0.kind]}, ${location.host.replace(/^www\./, '')}`); if (inst) inst.n = p0.n; } catch (e) { inst = null; } }
 			const batch = picks.filter((p) => document.contains(p.el)).map((p) => ({ n: p.n, kind: p.kind, label: p.label, note: p.note }));
 			picks.length = 0;
 			redraw();
