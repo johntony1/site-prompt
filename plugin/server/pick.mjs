@@ -5,7 +5,7 @@
 //   their own Chrome   when remote debugging is on (chrome://inspect/#remote-debugging, Chrome 144+): their tabs,
 //                      their logins; Chrome asks them to allow the session.
 //   a Chrome window    otherwise: site-prompt opens one with its own profile (kept, so sign-ins stay).
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { connectOwn, goto, launch, openTab, ownChrome, shot, viewport, wait } from './chrome.mjs';
@@ -144,6 +144,7 @@ export async function processBatch(batch, baseDir, { log = () => {} } = {}) {
 			if (!d) { out.push({ ...p, error: 'it was no longer on the page (it changed or you navigated away)' }); continue; }
 			const name = `${String(p.n).padStart(2, '0')}-${p.kind}${d.text ? '-' + slug(d.text.split('\n')[0]) : ''}`;
 			const dir = path.join(baseDir, host, 'picks', name);
+			rmSync(dir, { recursive: true, force: true }); // a new pick under an old name starts clean (no stale pictures)
 			mkdirSync(dir, { recursive: true });
 			await s.page.eval(`window.__spStatus?.(${JSON.stringify(`Reading ${p.n}. ${p.label}…`)})`).catch(() => {});
 			const elPath = await s.page.run(pathTo, sel).catch(() => null);

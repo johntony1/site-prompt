@@ -58,7 +58,7 @@ export function viewer() {
 		.thumb{position:relative;width:220px;border-radius:10px;overflow:hidden;background:var(--slab,#fff);box-shadow:0 0 0 1px var(--line2),0 12px 30px -12px rgba(0,0,0,.6)}
 		.tin{position:absolute;left:0;top:0;transform-origin:0 0}
 		.tin img{position:absolute;left:0;top:0}
-		.tin .whole *,.tin .whole *::before,.tin .whole *::after{transition:none!important;animation:none!important}
+		.tin .whole *,.tin .whole *::before,.tin .whole *::after{transition:none!important;animation-name:none!important}
 		.labels{position:fixed;left:32px;display:flex;flex-direction:column;gap:2px;opacity:0;transition:opacity .4s ease .45s}
 		.on .labels{opacity:1}
 		.label{display:flex;align-items:center;gap:10px;height:30px;padding-right:10px;cursor:default;font:500 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--faint);white-space:nowrap;transition:color .15s ease}
@@ -112,7 +112,7 @@ export function viewer() {
 		.vb.on{background:rgba(255,255,255,.1);color:var(--ink);box-shadow:0 0 0 1px var(--line2),0 1px 2px rgba(0,0,0,.4)}
 		.bar kbd{font:500 10.5px/1 var(--mono);color:var(--muted);padding:3px 5px;border-radius:4px;box-shadow:inset 0 0 0 1px var(--line)}
 		.copy{position:absolute;left:0;top:0;transform:translateZ(.5px);pointer-events:none}
-		.copy *,.copy *::before,.copy *::after{transition:none!important;animation:none!important}
+		.copy *,.copy *::before,.copy *::after{transition:none!important;animation-name:none!important}
 		${V.html ? (V.rules ?? []).join('\n') : ''}
 		${V.html ? V.layers.map((l, k) => `.p${k} *{visibility:hidden!important}${(l.members ?? [l.i]).map((m) => `.p${k} .c${m}`).join(',')}{visibility:visible!important}${l.force ? `.p${k} .c${l.i}{opacity:1!important}` : ''}`).join('\n') : ''}
 	</style>
@@ -197,10 +197,10 @@ export function viewer() {
 		// lift off: flat over the element, then turn and split. Where it ends up is measured first, with transitions off.
 		const all = [stack, ...planes];
 		all.forEach((e) => (e.style.transition = 'none'));
-		rx = 55; rz = -40;
+		({ ry, rx, rz } = ANGLES_START);
 		apply(); refit(); refit();
-		const target = { rx, rz, tx, ty, sc };
-		rx = 0; rz = 0; tx = 0; ty = 0; sc = 1; flat = true;
+		const target = { ry, rx, rz, tx, ty, sc };
+		ry = 0; rx = 0; rz = 0; tx = 0; ty = 0; sc = 1; flat = true;
 		apply();
 		stack.getBoundingClientRect();
 		all.forEach((e) => (e.style.transition = ''));
@@ -213,6 +213,19 @@ export function viewer() {
 			setTimeout(() => { planes.forEach((p) => (p.style.transitionDelay = '')); setHot(n - 1); }, 1000 + n * 40);
 		}));
 	});
+	// what was moving keeps moving: the page's own keyframes and timing, resumed where they were
+	if (V.html && V.anims?.length) {
+		const back = (o) => JSON.parse(JSON.stringify(o), (k, v) => (v === 'Infinity' ? Infinity : v));
+		for (const x of V.anims) {
+			for (const e of root.querySelectorAll(`.c${x.i}`)) {
+				try {
+					const an = e.animate(back(x.keyframes), { ...back(x.timing), fill: x.timing.fill === 'none' ? 'auto' : x.timing.fill });
+					an.playbackRate = x.rate || 1;
+					if (x.currentTime != null) an.currentTime = x.currentTime + (performance.now() - (x.at ?? performance.now())) * (x.rate || 1);
+				} catch {}
+			}
+		}
+	}
 	// the preview: the whole pick, scaled into 220 px
 	{
 		const thumb = $('.thumb'), tin = $('.tin'), W = V.html ? V.size.w : V.clip.w, H = V.html ? V.size.h : V.clip.h, k = Math.min(220 / W, 150 / H);
@@ -328,6 +341,7 @@ export function viewer() {
 	addEventListener('keydown', onKey, true);
 	$('[data-a=close]').addEventListener('click', close);
 	window.__spViewClose = close;
+	window.__spViewState = () => ({ tx, ty, sc, rx, ry, rz, flat, hot, transform: stack.style.transform });
 }
 
 /**
@@ -342,8 +356,43 @@ export function instant(el, title) {
 	try { snap = window.__spSnap('[data-sp-picked]'); } finally { el.removeAttribute('data-sp-picked'); }
 	if (!snap) return null;
 	const a = K.anatomyOf(el, (e) => { const v = e.getAttribute('data-sp-n'); return v == null ? null : +v; });
-	const groups = K.groupLayers(a.nodes, []);
-	const why = K.why(a.nodes);
+	// what is moving right now (a background animation, a loop): it keeps playing in the view instead of being torn apart
+	const anims = [];
+	const plain = (o) => JSON.parse(JSON.stringify(o, (k, v) => (v === Infinity ? 'Infinity' : v)));
+	for (const e of [el, ...el.querySelectorAll('[data-sp-n]')]) {
+		for (const an of e.getAnimations()) {
+			if (an.effect?.target !== e || an.constructor.name === 'CSSTransition' || !/running|paused/.test(an.playState)) continue;
+			try {
+				const t = an.effect.getTiming();
+				anims.push({ i: +e.getAttribute('data-sp-n'), name: an.animationName || (an.id ? an.id : 'animate()'), keyframes: plain(an.effect.getKeyframes().map(({ computedOffset, ...k }) => k)), timing: plain({ duration: t.duration, delay: t.delay, endDelay: t.endDelay, iterations: t.iterations, direction: t.direction, easing: t.easing, fill: t.fill }), currentTime: an.currentTime, rate: an.playbackRate, at: performance.now() });
+			} catch {}
+		}
+	}
+	// what can actually be seen: a part entirely covered by others (an icon behind a card) is not torn out of the picture
+	const R = el.getBoundingClientRect();
+	const covered = new Set();
+	const pe = document.createElement('style');
+	pe.textContent = '[data-sp-n]{pointer-events:auto!important}';
+	document.head.appendChild(pe);
+	try {
+		for (const n of a.nodes) {
+			if (n === a.nodes[0] || !(n.paint.length || Object.values(n.pseudos).some((v) => v.paint.length)) || n.box.w < 2 || n.box.h < 2) continue;
+			const e = el.querySelector(`[data-sp-n="${n.i}"]`);
+			if (!e) continue;
+			let hits = 0;
+			for (let gy = 1; gy <= 4 && !hits; gy++) for (let gx = 1; gx <= 4 && !hits; gx++) {
+				const x = R.left + n.box.x + (n.box.w * gx) / 5, y = R.top + n.box.y + (n.box.h * gy) / 5;
+				if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) { hits++; continue; } // off screen: cannot tell, keep it
+				const top = document.elementFromPoint(x, y);
+				if (top && (top === e || e.contains(top))) hits++;
+			}
+			if (!hits) covered.add(n.i);
+		}
+	} finally { pe.remove(); }
+	const moving = new Set(anims.filter((x) => { const d = x.timing.duration; return x.timing.iterations === 'Infinity' || (typeof d === 'number' && d > 0); }).map((x) => x.i));
+	const seenNodes = a.nodes.map((n) => (covered.has(n.i) && !moving.has(n.i) ? { ...n, paint: [], pseudos: {} } : n));
+	const groups = K.groupLayers(seenNodes, [], 12, moving);
+	const why = { ...K.why(a.nodes), covered: covered.size, moving: moving.size };
 	console.debug('[site-prompt] break it down', why, groups.map((g) => g.name));
 	const fonts = [];
 	for (const sh of document.styleSheets) {
@@ -356,9 +405,11 @@ export function instant(el, title) {
 	for (let x = el; x && !bg; x = x.parentElement) { const c = getComputedStyle(x).backgroundColor; if (c && c !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(c)) bg = c; }
 	bg ??= '#ffffff';
 	const r = el.getBoundingClientRect();
-	const layers = groups.map((g, k) => ({ n: k + 1, i: g.i, sub: g.sub, members: g.members, name: g.name, box: g.box, force: g.n.fx.opacity === '0', specs: K.groupSpecs({ ...g.n, sub: g.sub, members: g.members }, undefined) }));
-	const V = { el, title, html: snap.html, rules: snap.rules, bg, size: { w: r.width, h: r.height }, offset: { x: 0, y: 0 }, clip: { w: r.width, h: r.height }, layers };
+	const timingRows = (list) => list.slice(0, 5).map((x) => ({ k: x.name === 'animate()' ? 'Animates' : `Animation "${x.name}"`, v: `${typeof x.timing.duration === 'number' ? Math.round(x.timing.duration) + ' ms' : x.timing.duration}${x.timing.delay ? `, after ${Math.round(x.timing.delay)} ms` : ''}, ${x.timing.iterations === 'Infinity' ? 'loops' : x.timing.iterations > 1 ? x.timing.iterations + ' times' : 'once'}${x.timing.easing && x.timing.easing !== 'linear' ? `, ${x.timing.easing}` : ''}` }));
+	const hiddenNote = covered.size ? { k: 'Hidden behind others', v: `${covered.size} ${covered.size > 1 ? 'parts' : 'part'}` } : null;
+	const layers = groups.map((g, k) => ({ n: k + 1, i: g.i, sub: g.sub, members: g.members, name: g.name, box: g.box, moving: !!g.moving, force: !g.moving && g.n.fx.opacity === '0', specs: g.moving ? [{ k: 'Plays', v: 'live, as on the page' }, ...timingRows(anims.filter((x) => g.members.includes(x.i) || moving.has(x.i)))] : [...K.groupSpecs({ ...g.n, sub: g.sub, members: g.members }, undefined), ...(k === 0 && hiddenNote ? [hiddenNote] : [])] }));
+	const V = { el, title, anims, html: snap.html, rules: snap.rules, bg, size: { w: r.width, h: r.height }, offset: { x: 0, y: 0 }, clip: { w: r.width, h: r.height }, layers };
 	window.__spView = V;
 	window.__spViewer();
-	return { html: snap.html, rules: snap.rules, fonts: [...new Set(fonts)], bg, size: V.size, why, layers: layers.map(({ specs, ...l }) => l) };
+	return { html: snap.html, rules: snap.rules, fonts: [...new Set(fonts)], bg, size: V.size, why, anims: anims.map(({ at, ...x }) => x), layers: layers.map(({ specs, ...l }) => l) };
 }

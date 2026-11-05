@@ -157,7 +157,21 @@ export function spKit() {
 	 * The layers a person would name. A small pick keeps every painting part as its own layer; a big one (a section,
 	 * a grid of cards) is grouped at the depth where it comes to about a dozen: each group is a part and all it holds.
 	 */
-	function groupLayers(nodes, files = [], max = 12) {
+	function groupLayers(nodes, files = [], max = 12, moving = null) {
+		if (moving?.size) {
+			const byI = new Map(nodes.map((n) => [n.i, n]));
+			const isMoving = (n) => { for (let x = n; x; x = byI.get(x.p)) if (moving.has(x.i)) return true; return false; };
+			const still = nodes.map((n) => (isMoving(n) ? { ...n, paint: [], pseudos: {} } : n));
+			const anyStill = still.some((n) => n.paint.length || Object.values(n.pseudos).some((v) => v.paint.length));
+			const gs = anyStill ? groupLayers(still, files, max - 1, null) : [];
+			const mem = nodes.filter((n) => isMoving(n) && (n.paint.length || Object.values(n.pseudos).some((v) => v.paint.length)) && n.raw.w >= 2 && n.raw.h >= 2);
+			if (mem.length) {
+				const xs = mem.map((m) => m.box.w >= 2 ? m.box : { ...m.box, w: m.raw.w, h: m.raw.h });
+				const box = { x: Math.min(...xs.map((b) => b.x)), y: Math.min(...xs.map((b) => b.y)), r: Math.max(...xs.map((b) => b.x + b.w)), b: Math.max(...xs.map((b) => b.y + b.h)) };
+				gs.push({ i: mem[0].i, sub: true, n: mem[0], members: mem.map((m) => m.i), box: { x: box.x, y: box.y, w: Math.max(2, box.r - box.x), h: Math.max(2, box.b - box.y) }, name: `Animation (${moving.size} moving ${moving.size > 1 ? 'parts' : 'part'})`, moving: true });
+			}
+			return gs;
+		}
 		const first = groupStrict(nodes, files, max, false);
 		if (first.length) return first;
 		const second = groupStrict(nodes, files, max, true);
@@ -206,7 +220,8 @@ export function spKit() {
 			const mem = others.flatMap(inside);
 			mem.forEach((m) => claimed.add(m));
 			const alike = others.filter((x) => surface(x) && Math.abs(x.box.w - hero.box.w) < hero.box.w * 0.3).length >= others.length * 0.6;
-			groups.push({ n: others[0], members: mem, name: `${others.length} more ${alike ? (others.length > 1 ? 'cards' : 'card') : (others.length > 1 ? 'pieces' : 'piece')}` });
+			const drawings = others.every((x) => x.paint.some((q) => q.k === 'media'));
+			groups.push({ n: others[0], members: mem, name: others.length === 1 ? undefined : alike ? `${others.length} more cards` : drawings ? `${others.length} drawings` : `${others.length} more pieces` });
 		}
 		const heroAll = inside(hero);
 		heroAll.forEach((m) => claimed.add(m));
@@ -222,7 +237,7 @@ export function spKit() {
 			if (rest.length) groups.push({ n: rest[0], members: rest, name: rest.length > 1 ? `${rest.length} icons and marks` : undefined });
 			if (texts.length) groups.push({ n: texts[0], members: texts });
 		}
-		for (const x of onTop) { const mem = inside(x); mem.forEach((m) => claimed.add(m)); groups.push({ n: x, members: mem, name: x.paint.some((q) => q.k === 'media') && overlap(x.box, hero.box) > 0.8 ? 'Focus ring' : undefined }); }
+		for (const x of onTop) { const mem = inside(x); mem.forEach((m) => claimed.add(m)); groups.push({ n: x, members: mem, name: x.paint.some((q) => q.k === 'media') && overlap(x.box, hero.box) > 0.8 && Math.abs(x.box.w - hero.box.w) < hero.box.w * 0.15 && Math.abs(x.box.h - hero.box.h) < hero.box.h * 0.15 ? 'Focus ring' : undefined }); }
 		// anything else that shows (a heading outside the cards)
 		const loose = P.filter((m) => !claimed.has(m));
 		if (loose.length) groups.splice(others.length ? 2 : 1, 0, { n: loose[0], members: loose });
