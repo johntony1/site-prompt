@@ -117,9 +117,6 @@ export function viewer() {
 		.v.specs .plane .slab,.v.specs .plane .edge,.v.specs .plane .tag{opacity:0!important}
 		.v.specs .plane.hot .slab{opacity:1!important;background:transparent!important;box-shadow:0 0 0 1.5px var(--blue2),0 0 0 6px rgba(61,123,255,.16)!important}
 		.v.specs .labels{display:none}
-		.v.specs .spec{opacity:0;pointer-events:none}
-		.v.specs.kept .spec{opacity:1;pointer-events:auto}
-		.v.specs.kept .callout.r{opacity:.08;pointer-events:none}
 		.callouts{position:fixed;inset:0;pointer-events:none}
 		.callout{position:fixed;width:216px;padding:10px 12px 8px;border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0) 40%),var(--panel);box-shadow:0 0 0 1px var(--line),0 0 0 1px rgba(0,0,0,.5),0 14px 30px -14px rgba(0,0,0,.7);pointer-events:auto;cursor:pointer;opacity:0;transform:translateY(4px);transition:opacity .35s ease,transform .45s cubic-bezier(.2,.8,.2,1),box-shadow .15s ease}
 		.callout.in{opacity:1;transform:none}
@@ -164,6 +161,10 @@ export function viewer() {
 		.vb svg{width:15px;height:15px}
 		.vb:hover{color:var(--ink2)}
 		.vb.on{background:rgba(255,255,255,.1);color:var(--ink);box-shadow:0 0 0 1px var(--line2),0 1px 2px rgba(0,0,0,.4)}
+		.zoom{display:flex;align-items:center;padding:2px;border-radius:8px;background:rgba(255,255,255,.035);box-shadow:inset 0 0 0 1px var(--line)}
+		.zb{appearance:none;border:0;height:26px;min-width:26px;padding:0 6px;border-radius:6px;background:transparent;color:var(--ink2);font:500 13px/1 var(--mono);cursor:pointer}
+		.zb:hover{background:rgba(255,255,255,.07);color:var(--ink)}
+		.zb.pct{min-width:52px;font-size:11.5px;color:var(--muted)}
 		.bar kbd{font:500 10.5px/1 var(--mono);color:var(--muted);padding:3px 5px;border-radius:4px;box-shadow:inset 0 0 0 1px var(--line)}
 		.copy{position:absolute;left:0;top:0;transform:translateZ(.5px);pointer-events:none}
 		.copy *,.copy *::before,.copy *::after{transition:none!important;animation-name:none!important}
@@ -175,10 +176,10 @@ export function viewer() {
 		<div class="stage"><div class="stack">${V.layers.map((l, k) => `<div class="plane" data-k="${k}"><div class="edge"></div><div class="slab"><i class="q"></i><i class="q"></i><i class="q"></i><i class="q"></i></div>${V.html ? `<div class="copy p${k}" style="left:${-(V.offset?.x || 0)}px;top:${-(V.offset?.y || 0)}px">${V.html}</div>` : l.png ? `<img src="data:image/png;base64,${l.png}">` : ''}<span class="tag">${pad2(l.n)}</span><i class="pin l"></i><i class="pin r"></i></div>`).join('')}</div></div>
 		<svg class="callines"></svg><div class="callouts"></div><svg class="lines"><path class="lab" d=""/><circle class="lab" r="3" cx="-9" cy="-9"/><path class="card" d=""/><circle class="card" r="3" cx="-9" cy="-9"/></svg>
 		<div class="sizes">${SIZES.map((z) => `<button class="sz" data-z="${z.id}" title="${z.w} × ${z.h}"><span>${z.name}</span><i>${z.w}</i></button>`).join('')}</div>
-		<div class="head"><small>Breakdown</small><h2>${esc(V.title)}</h2><p>${n} layers · hover one to inspect · drag to turn</p><div class="was"><span>You picked</span><div class="thumb"><div class="tin">${V.html ? `<div class="whole" style="position:absolute;left:${-(V.offset?.x || 0)}px;top:${-(V.offset?.y || 0)}px">${V.html}</div>` : V.layers.map((l) => (l.png ? `<img src="data:image/png;base64,${l.png}">` : '')).join('')}</div></div></div></div>
+		<div class="head"><small>Breakdown</small><h2>${esc(V.title)}</h2><p>${n} layers · hover one to inspect · scroll to zoom · drag to move</p><div class="was"><span>You picked</span><div class="thumb"><div class="tin">${V.html ? `<div class="whole" style="position:absolute;left:${-(V.offset?.x || 0)}px;top:${-(V.offset?.y || 0)}px">${V.html}</div>` : V.layers.map((l) => (l.png ? `<img src="data:image/png;base64,${l.png}">` : '')).join('')}</div></div></div></div>
 		<div class="labels">${V.layers.slice().reverse().map((l) => `<div class="label" data-k="${l.n - 1}"><b>${pad2(l.n)}</b>${esc(l.name.replace(/ \(layer-\d+\.\w+\)/, ''))}</div>`).join('')}</div>
 		<div class="spec"></div>
-		<div class="bar"><div class="views"><button class="vb" data-v="specs" title="Specs: flat, with callouts"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="4.5" y="5" width="7" height="6" rx="1.2"/><path d="M4.5 8H2M11.5 8H14M8 5V2.5" opacity=".7"/></svg></button><button class="vb on" data-v="top" title="From above"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 2.5l5.5 3L8 8.5l-5.5-3L8 2.5z"/><path d="M2.5 8.5L8 11.5l5.5-3"/><path d="M2.5 11L8 14l5.5-3" opacity=".55"/></svg></button><button class="vb" data-v="front" title="Facing you"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="2" y="3.5" width="7" height="9" rx="1.2"/><path d="M11 4.5v7M13.5 5.5v5" opacity=".75"/></svg></button></div><span class="sep"></span><div class="sld" role="slider" tabindex="0" aria-label="Spread" aria-valuemin="0" aria-valuemax="100"><div class="fill"><span>Spread</span><b></b></div><div class="dots"><i></i><i></i><i></i><i></i><i></i><i></i></div><em></em></div><button class="b" data-a="flat">Flatten</button><span class="sep"></span><button class="b p" data-a="all">Copy whole thing</button><button class="b" data-a="close">Close <kbd>esc</kbd></button></div>
+		<div class="bar"><div class="views"><button class="vb" data-v="specs" title="Specs: flat, with callouts"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="4.5" y="5" width="7" height="6" rx="1.2"/><path d="M4.5 8H2M11.5 8H14M8 5V2.5" opacity=".7"/></svg></button><button class="vb on" data-v="top" title="From above"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 2.5l5.5 3L8 8.5l-5.5-3L8 2.5z"/><path d="M2.5 8.5L8 11.5l5.5-3"/><path d="M2.5 11L8 14l5.5-3" opacity=".55"/></svg></button><button class="vb" data-v="front" title="Facing you"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="2" y="3.5" width="7" height="9" rx="1.2"/><path d="M11 4.5v7M13.5 5.5v5" opacity=".75"/></svg></button></div><span class="sep"></span><div class="sld" role="slider" tabindex="0" aria-label="Spread" aria-valuemin="0" aria-valuemax="100"><div class="fill"><span>Spread</span><b></b></div><div class="dots"><i></i><i></i><i></i><i></i><i></i><i></i></div><em></em></div><button class="b" data-a="flat">Flatten</button><span class="sep"></span><div class="zoom"><button class="zb" data-z="out" title="Zoom out (−)">−</button><button class="zb pct" data-z="fit" title="Fit (0)">100%</button><button class="zb" data-z="in" title="Zoom in (+)">+</button></div><span class="sep"></span><button class="b p" data-a="all">Copy whole thing</button><button class="b" data-a="close">Close <kbd>esc</kbd></button></div>
 	</div>`;
 	document.documentElement.appendChild(host);
 	const $ = (s) => root.querySelector(s);
@@ -230,14 +231,15 @@ export function viewer() {
 	let mode = V.view ?? (depth >= 3 ? 'top' : 'specs');
 	let hot = null;
 	const ANGLES_START = { ry: 0, rx: 55, rz: -40 };
+	let zoom = 1, px = 0, py = 0;
 	let ry = 0, rx = 0, rz = 0, spread = V.spread ?? 0.6, flat = false, tx = 0, ty = 0, sc = 1;
 	const gap = () => (flat ? 0 : spread * 1.6 * Math.max(40, Math.min(170, Math.max(V.clip.w, V.clip.h) * 0.16)));
 	const apply = () => {
-		stack.style.transform = `translate(${tx}px, ${ty}px) scale(${sc}) rotateY(${flat ? 0 : ry}deg) rotateX(${flat ? 0 : rx}deg) rotateZ(${flat ? 0 : rz}deg)`;
+		stack.style.transform = `translate(${tx + px}px, ${ty + py}px) scale(${sc * zoom}) rotateY(${flat ? 0 : ry}deg) rotateX(${flat ? 0 : rx}deg) rotateZ(${flat ? 0 : rz}deg)`;
 		planes.forEach((p, k) => { p.style.transform = `translateZ(${k * gap() + (k === hot && !flat ? gap() * 0.35 : 0)}px)`; });
 	};
 	// the free space: between the labels on the left and the card on the right
-	const space = () => (mode === 'specs' ? { l: 270, r: innerWidth - 270, t: 96, b: innerHeight - 96 } : { l: 290, r: innerWidth - 390, t: 70, b: innerHeight - 90 });
+	const space = () => (mode === 'specs' ? { l: Math.min(290, innerWidth * 0.22), r: innerWidth - Math.min(400, innerWidth * 0.3), t: 96, b: innerHeight - 96 } : { l: 290, r: innerWidth - 390, t: 70, b: innerHeight - 90 });
 	const refit = () => {
 		let u = null;
 		for (const p of planes) for (const q of [p.querySelector('.slab').getBoundingClientRect(), p.querySelector('.edge').getBoundingClientRect(), p.querySelector('.tag').getBoundingClientRect()]) u = u ? { l: Math.min(u.l, q.left), t: Math.min(u.t, q.top), r: Math.max(u.r, q.right), b: Math.max(u.b, q.bottom) } : { l: q.left, t: q.top, r: q.right, b: q.bottom };
@@ -383,12 +385,13 @@ export function viewer() {
 		for (let k = planes.length - 1; k >= 0; k--) if (inside(corners(planes[k]), e.clientX, e.clientY)) { setHot(k); return; }
 	});
 	let drag = null;
-	canvas.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, rx, rz, ry }; canvas.classList.add('drag'); stack.classList.add('fast'); canvas.setPointerCapture(e.pointerId); });
-	canvas.addEventListener('pointermove', (e) => { if (!drag) return; if (Math.abs(drag.ry) > 5) { ry = Math.max(-80, Math.min(80, drag.ry + (e.clientX - drag.x) * 0.3)); rx = Math.max(-40, Math.min(85, drag.rx - (e.clientY - drag.y) * 0.3)); } else { rz = drag.rz + (e.clientX - drag.x) * 0.3; rx = Math.max(0, Math.min(85, drag.rx - (e.clientY - drag.y) * 0.3)); } flat = false; apply(); });
+	canvas.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, rx, rz, ry, px, py, pan: mode === 'specs' || e.shiftKey }; canvas.classList.add('drag'); stack.classList.add('fast'); canvas.setPointerCapture(e.pointerId); });
+	canvas.addEventListener('pointermove', (e) => { if (!drag) return; if (drag.pan) { px = drag.px + e.clientX - drag.x; py = drag.py + e.clientY - drag.y; apply(); return; } if (Math.abs(drag.ry) > 5) { ry = Math.max(-80, Math.min(80, drag.ry + (e.clientX - drag.x) * 0.3)); rx = Math.max(-40, Math.min(85, drag.rx - (e.clientY - drag.y) * 0.3)); } else { rz = drag.rz + (e.clientX - drag.x) * 0.3; rx = Math.max(0, Math.min(85, drag.rx - (e.clientY - drag.y) * 0.3)); } flat = false; apply(); });
 	canvas.addEventListener('pointerup', (e) => {
 		const moved = drag && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 4;
+		const wasPan = drag?.pan;
 		drag = null; canvas.classList.remove('drag'); stack.classList.remove('fast');
-		if (moved) return;
+		if (moved) { if (wasPan && mode === 'specs') buildCallouts(); return; }
 		// a click: keep the layer under the pointer, or let go on empty space
 		let k = null;
 		for (let j = planes.length - 1; j >= 0; j--) if (inside(corners(planes[j]), e.clientX, e.clientY)) { k = j; break; }
@@ -423,33 +426,33 @@ export function viewer() {
 		let pick = V.layers.map((l, k) => ({ l, k, q: quadOf(k) })).filter((x) => !(x.l.box && x.l.box.w >= W * 0.95 && x.l.box.h >= H * 0.95));
 		if (!pick.length) pick = V.layers.map((l, k) => ({ l, k, q: quadOf(k) }));
 		pick = pick.sort((a, b) => (b.l.box?.w * b.l.box?.h || 0) - (a.l.box?.w * a.l.box?.h || 0)).slice(0, 8);
-		const mid = (comp.l + comp.r) / 2;
-		const cols = { l: [], r: [] };
-		for (const x of pick) (((x.q.l + x.q.r) / 2 < mid) ? cols.l : cols.r).push(x);
-		// keep both columns in use
-		if (!cols.l.length && cols.r.length > 1) cols.l.push(...cols.r.splice(0, Math.floor(cols.r.length / 2)));
-		if (!cols.r.length && cols.l.length > 1) cols.r.push(...cols.l.splice(Math.ceil(cols.l.length / 2)));
-		for (const side of ['l', 'r']) {
-			const list = cols[side].sort((a, b) => (a.q.t + a.q.b) - (b.q.t + b.q.b));
-			let floor = 84;
-			for (const x of list) {
-				const rows = keyRows(x.l);
-				const el2 = document.createElement('div');
-				el2.className = `callout ${side}`;
-				el2.innerHTML = `<b>${esc(x.l.name.replace(/ \(layer-\d+\.\w+\)/, ''))}</b>${rows.map((r) => `<div class="cr"><span>${esc(r.k)}</span><em>${r.sw ? `<s style="background:${esc(r.sw)}"></s>` : ''}${r.pill ? `<i class="pill">${esc(r.v)}</i>` : esc(r.v)}</em></div>`).join('')}`;
-				callBox.appendChild(el2);
-				const h = el2.getBoundingClientRect().height;
-				const want = (x.q.t + x.q.b) / 2 - h / 2;
-				const y = Math.max(floor, Math.min(innerHeight - 96 - h, want));
-				floor = y + h + 10;
-				el2.style.top = y + 'px';
-				el2.style.left = (side === 'l' ? Math.max(16, comp.l - 48 - 216) : Math.min(innerWidth - 232, comp.r + 48)) + 'px';
-				el2.addEventListener('mouseenter', () => { if (pinned == null) setHot(x.k); });
-				el2.addEventListener('click', () => keep(pinned === x.k ? null : x.k));
-				calls.push({ el: el2, k: x.k, side });
-				requestAnimationFrame(() => el2.classList.add('in'));
-			}
+		// one column on the left (the detail card has the right), as many as fit the screen
+		const avail = innerHeight - 84 - 96;
+		const per = avail / Math.max(1, pick.length) >= 120 ? 4 : avail / Math.max(1, pick.length) >= 76 ? 2 : 1;
+		const fits = Math.max(1, Math.floor(avail / (per === 4 ? 112 : per === 2 ? 72 : 50)));
+		const list = pick.slice(0, fits).sort((a, b) => (a.q.t + a.q.b) - (b.q.t + b.q.b));
+		const colW = Math.min(216, Math.max(150, comp.l - 64 - 16));
+		let floor = 84;
+		for (const x of list) {
+			const rows = keyRows(x.l).slice(0, per);
+			const el2 = document.createElement('div');
+			el2.className = 'callout l';
+			el2.style.width = colW + 'px';
+			el2.innerHTML = `<b>${esc(x.l.name.replace(/ \(layer-\d+\.\w+\)/, ''))}</b>${rows.map((r) => `<div class="cr"><span>${esc(r.k)}</span><em>${r.sw ? `<s style="background:${esc(r.sw)}"></s>` : ''}${r.pill ? `<i class="pill">${esc(r.v)}</i>` : esc(r.v)}</em></div>`).join('')}`;
+			callBox.appendChild(el2);
+			const h = el2.getBoundingClientRect().height;
+			const want = (x.q.t + x.q.b) / 2 - h / 2;
+			const y = Math.max(floor, Math.min(innerHeight - 96 - h, want));
+			if (y + h > innerHeight - 88) { el2.remove(); break; } // no room left on screen: the rest stay in the list and the card
+			floor = y + h + 8;
+			el2.style.top = y + 'px';
+			el2.style.left = '16px';
+			el2.addEventListener('mouseenter', () => { if (pinned == null) setHot(x.k); });
+			el2.addEventListener('click', () => keep(pinned === x.k ? null : x.k));
+			calls.push({ el: el2, k: x.k, side: 'l' });
+			requestAnimationFrame(() => el2.classList.add('in'));
 		}
+		if (hot == null && list.length) setHot(list[0].k);
 		drawCallLines();
 	};
 	const drawCallLines = () => {
@@ -468,6 +471,21 @@ export function viewer() {
 	};
 	addEventListener('resize', () => { if (mode === 'specs') { refit(); setTimeout(buildCallouts, 60); } });
 	const ANGLES = { top: { ry: 0, rx: 55, rz: -40 }, front: { ry: -38, rx: 8, rz: 0 } };
+	// zoom: wheel or pinch on the canvas (toward the pointer), the buttons, + − 0; pan by dragging (Specs) or Shift-drag
+	const pct = $('.zb.pct');
+	const centre = () => { const b = stage.getBoundingClientRect(); return { x: b.left + V.offset.x + V.clip.w / 2 + tx + px, y: b.top + V.offset.y + V.clip.h / 2 + ty + py }; };
+	const zoomTo = (z, at) => {
+		z = Math.max(0.2, Math.min(6, z));
+		const c = centre(), f = z / zoom;
+		if (at) { px += (at.x - c.x) * (1 - f); py += (at.y - c.y) * (1 - f); }
+		zoom = z;
+		pct.textContent = Math.round(zoom * 100) + '%';
+		apply();
+		clearTimeout(zoomTo.t); zoomTo.t = setTimeout(() => { if (mode === 'specs') buildCallouts(); }, 160);
+	};
+	const fitView = () => { zoom = 1; px = 0; py = 0; pct.textContent = '100%'; apply(); if (mode === 'specs') setTimeout(buildCallouts, 60); };
+	canvas.addEventListener('wheel', (e) => { e.preventDefault(); stack.classList.add('fast'); zoomTo(zoom * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), { x: e.clientX, y: e.clientY }); clearTimeout(canvas.t); canvas.t = setTimeout(() => stack.classList.remove('fast'), 120); }, { passive: false });
+	root.querySelectorAll('.zb').forEach((b) => b.addEventListener('click', () => { const z = b.dataset.z; if (z === 'fit') fitView(); else zoomTo(zoom * (z === 'in' ? 1.25 : 0.8), centre()); }));
 	const views = [...root.querySelectorAll('.vb')];
 	views.forEach((b) => b.classList.toggle('on', b.dataset.v === mode));
 	const setView = (name) => {
@@ -477,6 +495,7 @@ export function viewer() {
 		const all2 = [stack, ...planes];
 		all2.forEach((e) => (e.style.transition = 'none'));
 		mode = name;
+		zoom = 1; px = 0; py = 0; pct.textContent = '100%';
 		v.classList.toggle('specs', name === 'specs');
 		clearCallouts();
 		({ ry, rx, rz } = name === 'specs' ? { ry: 0, rx: 0, rz: 0 } : ANGLES[name]);
@@ -549,7 +568,7 @@ export function viewer() {
 		apply();
 		setTimeout(() => { if (el) el.style.visibility = was; host.remove(); window.__spViewerOpen = false; }, 1050);
 	};
-	const onKey = (e) => { if ((e.key === 'v' || e.key === 'V') && !e.metaKey && !e.ctrlKey) { setView(views.find((b) => !b.classList.contains('on')).dataset.v); return; } if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); close(); } };
+	const onKey = (e) => { if ((e.key === '+' || e.key === '=') && !e.metaKey) { e.preventDefault(); zoomTo(zoom * 1.25, centre()); return; } if (e.key === '-' && !e.metaKey) { e.preventDefault(); zoomTo(zoom * 0.8, centre()); return; } if (e.key === '0' && !e.metaKey) { e.preventDefault(); fitView(); return; } if ((e.key === 'v' || e.key === 'V') && !e.metaKey && !e.ctrlKey) { setView(views.find((b) => !b.classList.contains('on')).dataset.v); return; } if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); close(); } };
 	addEventListener('keydown', onKey, true);
 	$('[data-a=close]').addEventListener('click', close);
 	window.__spViewClose = close;
