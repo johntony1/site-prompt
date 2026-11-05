@@ -96,6 +96,21 @@ export function viewer() {
 		.spec pre{margin:6px 12px 10px;padding:10px 12px;max-height:180px;overflow:auto;border-radius:9px;background:rgba(0,0,0,.35);box-shadow:inset 0 0 0 1px var(--line);font:400 11px/1.55 var(--mono);color:var(--ink2);white-space:pre-wrap;word-break:break-word}
 		.spec .sec small .mini{appearance:none;border:0;float:right;margin-top:-3px;height:18px;padding:0 7px;border-radius:5px;font:500 10.5px/18px var(--mono);letter-spacing:.04em;text-transform:none;color:var(--ink2);background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px var(--line);cursor:pointer}
 		.spec .sec small .mini:hover{color:var(--ink)}
+		.spec .tree{padding:4px 8px 10px}
+		.spec .pt{display:flex;align-items:center;gap:6px;height:28px;padding-right:8px;border-radius:7px;cursor:pointer;color:var(--ink2);font-size:12.5px}
+		.spec .pt:hover{background:rgba(255,255,255,.05);color:var(--ink)}
+		.spec .pt .car{width:16px;height:16px;flex:none;display:grid;place-items:center;border-radius:4px;color:var(--faint);transition:transform .15s ease}
+		.spec .pt .car:hover{background:rgba(255,255,255,.08);color:var(--ink)}
+		.spec .pt.open > .car{transform:rotate(90deg)}
+		.spec .pt .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+		.spec .pt .dm{font:400 10.5px/1 var(--mono);color:var(--faint);flex:none}
+		.spec .sub{display:none}
+		.spec .sub.open{display:block}
+		.spec .crumbs{flex-wrap:wrap;row-gap:4px}
+		.spec .crumbs .bk{appearance:none;border:0;height:22px;padding:0 8px 0 6px;border-radius:6px;background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink2);font:500 11.5px/22px inherit;cursor:pointer;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+		.spec .crumbs .bk:hover{color:var(--ink);background:rgba(255,255,255,.1)}
+		.spec .crumbs .sl{color:var(--faint);font-size:12px}
+		.pbox{position:absolute;pointer-events:none;border-radius:3px;box-shadow:0 0 0 1.5px var(--blue2),0 0 0 5px rgba(61,123,255,.16);background:rgba(61,123,255,.07);transform:translateZ(1.5px);transition:left .2s ease,top .2s ease,width .2s ease,height .2s ease}
 		.spec .chips{display:flex;flex-wrap:wrap;gap:5px;padding:6px 16px 10px}
 		.spec .chips span{font-size:11.5px;color:var(--ink2);padding:3px 8px;border-radius:6px;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px var(--line)}
 		.spec .row{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:30px;font-size:12.5px;border-top:1px solid rgba(255,255,255,.05)}
@@ -331,6 +346,61 @@ export function viewer() {
 		setTimeout(() => { btn.textContent = label; btn.classList.remove('done'); }, 1600);
 		window.__spCopied = text;
 	};
+	// the thread: a layer's parts as a tree; a part opens its own card, with the way back above it
+	const CAR = '<svg width="10" height="10" viewBox="0 0 10 10"><path d="M3.5 2l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+	const treeOf = (items, depth) => items.map((it) => `<div class="pt" data-p="${it.id}" style="padding-left:${4 + depth * 14}px">${it.kids?.length ? `<span class="car">${CAR}</span>` : '<span class="car"></span>'}<span class="nm">${esc(it.name)}</span>${it.note ? `<span class="dm">${esc(it.note)}</span>` : it.box ? `<span class="dm">${Math.round(it.box.w)}×${Math.round(it.box.h)}</span>` : ''}</div>${it.kids?.length ? `<div class="sub" data-s="${it.id}">${treeOf(it.kids, depth + 1)}</div>` : ''}`).join('');
+	const pathTo = (items, id, trail = []) => { for (const it of items ?? []) { const t = [...trail, it]; if (it.id === id) return t; const r = pathTo(it.kids, id, t); if (r) return r; } return null; };
+	const wireTree = (k) => {
+		card.querySelectorAll('.pt').forEach((row) => {
+			const id = +row.dataset.p;
+			row.querySelector('.car')?.addEventListener('click', (e) => { e.stopPropagation(); const sub = card.querySelector(`.sub[data-s="${id}"]`); if (!sub) return; sub.classList.toggle('open'); row.classList.toggle('open', sub.classList.contains('open')); });
+			row.addEventListener('mouseenter', () => { const t = pathTo(V.layers[k].parts, id); if (t) outline(k, t[t.length - 1]); });
+			row.addEventListener('mouseleave', () => outline(k, partOn));
+			row.addEventListener('click', () => { const t = pathTo(V.layers[k].parts, id); if (t) showPart(k, t); });
+		});
+	};
+	let partOn = null;
+	const outline = (k, it) => {
+		root.querySelectorAll('.pbox').forEach((x) => x.remove());
+		if (!it?.box || k == null) return;
+		const b = document.createElement('div');
+		b.className = 'pbox';
+		Object.assign(b.style, { left: it.box.x - 2 + 'px', top: it.box.y - 2 + 'px', width: it.box.w + 4 + 'px', height: it.box.h + 4 + 'px' });
+		planes[k].appendChild(b);
+	};
+	const showPart = (k, trail) => {
+		const l = V.layers[k], it = trail[trail.length - 1];
+		if (pinned !== k) keep(k);
+		partOn = it;
+		outline(k, it);
+		const d = (V.partDetail && V.partDetail(it.idx)) || { specs: it.box ? [{ k: 'Size', v: `${Math.round(it.box.w)} × ${Math.round(it.box.h)}` }] : [] };
+		const rowsOf = (list) => list.map((row) => `<div class="row"><span>${esc(row.k)}</span><em>${swatch(row)}<u title="${esc(row.v)}">${esc(row.v)}</u></em></div>`).join('');
+		const sect = (name, list) => (list?.length ? `<div class="sec"><small>${name}</small><div class="rows">${rowsOf(list)}</div></div>` : '');
+		card.innerHTML = `<div class="ch crumbs"><i>${pad2(l.n)}</i><button class="bk" data-t="-1" title="Back to the layer">‹ ${esc(l.name)}</button>${trail.slice(0, -1).map((x, j) => `<span class="sl">/</span><button class="bk" data-t="${j}">${esc(x.name)}</button>`).join('')}<span class="sl">/</span><b>${esc(it.name)}</b></div>
+			<div class="body">
+			${d.why?.length ? `<div class="why">${d.why.map((w) => `<p>${esc(w)}</p>`).join('')}</div>` : ''}
+			${it.kids?.length ? `<div class="sec"><small>Parts</small><div class="tree">${treeOf(it.kids, 0)}</div></div>` : ''}
+			${sect('Look', (d.specs ?? []).filter((r) => !/^(Moves|Motion|Loops|Plays|Animat|Moving)/.test(r.k)))}
+			${sect('Type', d.type)}
+			${sect('Design', d.design)}
+			${sect('Layout', it.kids?.length || it.idx.length === 1 ? d.layout : null)}
+			${sect('Engineering', d.eng)}
+			${d.authored ? `<div class="sec"><small>Authored CSS <button class="mini" data-c="authored">Copy</button></small><pre>${esc(d.authored)}</pre></div>` : ''}
+			</div>
+			<div class="acts"><button class="b" data-c="back">Back to ${esc(l.name.length > 22 ? l.name.slice(0, 22) + '…' : l.name)}</button>${d.authored ? '<button class="b" data-c="pcss">Copy CSS</button>' : ''}</div>`;
+		card.querySelectorAll('.bk').forEach((b) => b.addEventListener('click', () => { const t = +b.dataset.t; if (t < 0) { partOn = null; outline(k, null); showCard(k); } else showPart(k, trail.slice(0, t + 1)); }));
+		card.querySelector('[data-c=back]').addEventListener('click', () => { partOn = null; outline(k, null); showCard(k); });
+		card.querySelector('[data-c=authored]')?.addEventListener('click', (e) => copy(d.authored, e.currentTarget, 'Copy'));
+		card.querySelector('[data-c=pcss]')?.addEventListener('click', (e) => copy(d.authored, e.currentTarget, 'Copy CSS'));
+		// its own parts open the same way, one level further down the thread
+		card.querySelectorAll('.pt').forEach((row) => {
+			const id = +row.dataset.p;
+			row.querySelector('.car')?.addEventListener('click', (e) => { e.stopPropagation(); const sub = card.querySelector(`.sub[data-s="${id}"]`); if (!sub) return; sub.classList.toggle('open'); row.classList.toggle('open', sub.classList.contains('open')); });
+			row.addEventListener('mouseenter', () => { const t2 = pathTo(it.kids, id); if (t2) outline(k, t2[t2.length - 1]); });
+			row.addEventListener('mouseleave', () => outline(k, partOn));
+			row.addEventListener('click', () => { const t2 = pathTo(it.kids, id); if (t2) showPart(k, [...trail, ...t2]); });
+		});
+	};
 	const showCard = (k) => {
 		const l = V.layers[k];
 		const rowsOf = (list) => list.map((row) => `<div class="row${/recording/.test(row.v) ? ' wait' : ''}"><span>${esc(row.k)}</span><em>${swatch(row)}<u title="${esc(row.v)}">${esc(row.v)}</u></em></div>`).join('');
@@ -345,10 +415,11 @@ export function viewer() {
 			${sect('Look', l.specs.filter((r) => !isMotion(r)))}
 			${sect('Type', l.type)}
 			${sect('Layout', l.layout)}
-			${l.holds?.length ? `<div class="sec"><small>Holds</small><div class="chips">${l.holds.map((h) => `<span>${esc(h)}</span>`).join('')}</div></div>` : ''}
+			${l.parts?.length ? `<div class="sec"><small>Parts <span style="text-transform:none;letter-spacing:0;font-family:inherit">· click one, or double-click it on the canvas</span></small><div class="tree">${treeOf(l.parts, 0)}</div></div>` : l.holds?.length ? `<div class="sec"><small>Holds</small><div class="chips">${l.holds.map((h) => `<span>${esc(h)}</span>`).join('')}</div></div>` : ''}
 			${sect('Motion', l.specs.filter(isMotion))}
 			</div>
 			<div class="acts"><button class="b p" data-c="prompt" ${l.prompt ? '' : 'disabled style="opacity:.55"'}>${l.prompt ? 'Copy prompt' : 'Writing prompt…'}</button><button class="b" data-c="css" ${l.css ? '' : 'disabled style="opacity:.55"'}>Copy CSS</button></div>`;
+		wireTree(k);
 		card.querySelector('[data-c=prompt]').addEventListener('click', (e) => V.layers[k].prompt && copy(V.layers[k].prompt + (V.layers[k].authored ? `\n\n## Authored CSS (as written on the site: variables, media queries and states)\n\`\`\`css\n${V.layers[k].authored}\n\`\`\`` : ''), e.currentTarget, 'Copy prompt'));
 		card.querySelector('[data-c=authored]')?.addEventListener('click', (e) => copy(V.layers[k].authored, e.currentTarget, 'Copy'));
 		card.querySelector('[data-c=css]').addEventListener('click', (e) => V.layers[k].css && copy(V.layers[k].css, e.currentTarget, 'Copy CSS'));
@@ -373,6 +444,7 @@ export function viewer() {
 		planes.forEach((p, j) => p.classList.toggle('hot', j === k));
 		apply();
 		labels.forEach((x) => x.classList.toggle('hot', +x.dataset.k === k));
+		partOn = null; outline(k, null);
 		showCard(k);
 		// the card follows the layer up and down
 		const pr = planes[k].querySelector('.pin.r').getBoundingClientRect();
@@ -409,6 +481,25 @@ export function viewer() {
 		let k = null;
 		for (let j = planes.length - 1; j >= 0; j--) if (inside(corners(planes[j]), e.clientX, e.clientY)) { k = j; break; }
 		keep(k);
+	});
+	// double-click: into the part under the pointer (the deepest one the thread knows), like Figma
+	canvas.addEventListener('dblclick', (e) => {
+		let k = null;
+		for (let j = planes.length - 1; j >= 0; j--) if (inside(corners(planes[j]), e.clientX, e.clientY)) { k = j; break; }
+		if (k == null || !V.layers[k].parts?.length) return;
+		const cp = planes[k].querySelector('.copy');
+		if (!cp) return;
+		cp.style.pointerEvents = 'auto';
+		cp.querySelectorAll('*').forEach((x) => (x.style.pointerEvents = 'auto'));
+		let hits = [];
+		try { hits = root.elementsFromPoint(e.clientX, e.clientY).filter((x) => cp.contains(x)); } finally { cp.style.pointerEvents = ''; cp.querySelectorAll('*').forEach((x) => (x.style.pointerEvents = '')); }
+		const best = (items, i, trail = []) => { let found = null; for (const it of items ?? []) if (it.idx.includes(i)) { const t = [...trail, it]; found = best(it.kids, i, t) ?? t; break; } return found; };
+		for (const h of hits) {
+			const m = [...h.classList].map((c) => c.match(/^c(\d+)$/)?.[1]).find(Boolean);
+			if (m == null) continue;
+			const t = best(V.layers[k].parts, +m);
+			if (t) { showPart(k, t); return; }
+		}
 	});
 	// ---- Specs: callout cards around the flat element, each joined to its part
 	const callBox = $('.callouts'), callSvg = $('svg.callines');
@@ -601,13 +692,18 @@ export function viewer() {
 export async function instant(el, title, area = null, show = true, pre = null) {
 	// taken when they clicked (a menu open on hover, a state that has gone since): show that, not what is there now
 	if (pre && show) {
-		const V = { ...pre, el: null, title, area, mirror: pre.mirror ?? [], width: pre.width };
+		const V = { ...pre, el: null, title, area, mirror: pre.mirror ?? [], partDetail: pre.partDetail, width: pre.width };
 		window.__spView = V;
 		window.__spViewer();
-		return { html: pre.html, rules: pre.rules, fonts: pre.fonts ?? [], bg: pre.bg, size: pre.size, why: pre.why ?? {}, fromClick: true, layers: pre.layers.map(({ specs, type, layout, holds, why: w, design, eng, authored, ...l }) => ({ ...l, authored })) };
+		return { html: pre.html, rules: pre.rules, fonts: pre.fonts ?? [], bg: pre.bg, size: pre.size, why: pre.why ?? {}, fromClick: true, layers: pre.layers.map(({ specs, type, layout, holds, parts, why: w, design, eng, authored, ...l }) => ({ ...l, authored })) };
 	}
 	const K = window.__spKit;
 	if (!K || !window.__spSnap || !el) return null;
+	// a transition still running (a menu sliding open) settles first: the copy is of where it comes to rest
+	try {
+		const running = el.getAnimations({ subtree: true }).filter((an) => an.constructor.name === 'CSSTransition' && an.playState === 'running');
+		if (running.length) await Promise.race([Promise.all(running.map((an) => an.finished.catch(() => {}))), new Promise((r) => setTimeout(r, 700))]);
+	} catch {}
 	el.setAttribute('data-sp-picked', '1');
 	let snap = null;
 	try { snap = window.__spSnap('[data-sp-picked]'); } finally { el.removeAttribute('data-sp-picked'); }
@@ -618,12 +714,16 @@ export async function instant(el, title, area = null, show = true, pre = null) {
 	const look = (e) => { const c = getComputedStyle(e); return `${c.transform}|${c.opacity}|${c.filter}|${c.clipPath}|${c.translate}|${c.scale}|${c.rotate}|${c.strokeDashoffset}|${c.strokeDasharray}|${c.stroke}|${c.fill}|${c.offsetDistance}|${c.backgroundPosition}|${c.getPropertyValue('d')}`; };
 	const before = new Map([...live].map(([i, e]) => [i, look(e)]));
 	await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 30))));
-	const moving = new Set();
+	const moving = new Set(), bigMoving = new Set();
 	for (const [i, e] of live) if (i !== 0 && before.get(i) !== look(e)) moving.add(i);
 	for (const [i, e] of live) if (i !== 0 && e.getAnimations().some((an) => an.effect?.target === e && an.constructor.name !== 'CSSTransition' && an.playState === 'running')) moving.add(i);
 	// a canvas is drawn by a script: it plays live (its pixels are copied into the view every frame)
 	for (const [i, e] of live) if (i !== 0 && e.tagName === 'CANVAS' && e.width * e.height >= 1600) moving.add(i);
 	// a moving part's own moving children move with it: keep the top-most
+	// a big container that moves (the whole panel sliding in) is not background motion: its parts group as they are
+	const rootArea = Math.max(1, a.nodes[0].box.w * a.nodes[0].box.h);
+	const paintsUnder = (e) => [...e.querySelectorAll('[data-sp-n]')].length;
+	for (const i of [...moving]) { const n = a.nodes.find((x) => x.i === i), e = live.get(i); if (n && e && e.tagName !== 'CANVAS' && (n.box.w * n.box.h > rootArea * 0.25 || paintsUnder(e) >= 8)) { moving.delete(i); bigMoving.add(i); } }
 	const movingTop = new Set([...moving].filter((i) => { for (let x = live.get(i)?.parentElement; x && x !== el; x = x.parentElement) { const j = x.getAttribute('data-sp-n'); if (j != null && moving.has(+j)) return false; } return true; }));
 	// what can actually be seen: a part entirely covered by others (an icon behind a card) is not torn out of the picture
 	const R = { left: a.vis.x, top: a.vis.y };
@@ -816,22 +916,79 @@ export async function instant(el, title, area = null, show = true, pre = null) {
 	// measured in the same moment as the anatomy (the page may still be scrolling smoothly)
 	const visOff = a.visOff ?? { x: 0, y: 0 };
 	const hiddenNote = covered.size ? { k: 'Hidden behind others', v: `${covered.size} ${covered.size > 1 ? 'parts' : 'part'}` } : null;
+	// what each layer holds, as a tree a person can open (a card → its title, its text, its drawing → the drawing's
+	// lines and circles); drawings group by what they draw, and a run of alike parts (digits, list rows) folds into one
+	const nodeOf = new Map(a.nodes.map((n) => [n.i, n]));
+	const paintsN = (n) => n && (n.paint.length || Object.values(n.pseudos).some((v) => v.paint.length));
+	const unionBox = (idx) => { const xs = idx.map((i) => nodeOf.get(i)?.box).filter((b) => b && b.w > 0 && b.h > 0); if (!xs.length) return null; const x = Math.min(...xs.map((b) => b.x)), y = Math.min(...xs.map((b) => b.y)); return { x, y, w: Math.max(...xs.map((b) => b.x + b.w)) - x, h: Math.max(...xs.map((b) => b.y + b.h)) - y }; };
+	let partId = 0;
+	const kindOf = (n) => { const has = (k) => n.paint.some((q) => q.k === k); if (has('text')) return 'Text'; if (n.tag === 'circle' || n.tag === 'ellipse') return 'Circles'; if (n.tag === 'rect') return 'Rectangles'; if (has('stroke') && n.paint.some((q) => q.k === 'stroke' && /dashed/.test(q.v))) return 'Dashed lines'; if (has('stroke') && !has('vfill')) return 'Lines'; if (has('media')) return 'Images'; return 'Shapes'; };
+	const partsOf = (members) => {
+		const M = new Set(members);
+		const up = (i) => { for (let p = nodeOf.get(i)?.p; p != null; p = nodeOf.get(p)?.p) if (M.has(p)) return p; return null; };
+		const kidsM = new Map();
+		for (const i of members) { const u = up(i); (kidsM.get(u) ?? kidsM.set(u, []).get(u)).push(i); }
+		const all = (i) => [i, ...(kidsM.get(i) ?? []).flatMap(all)];
+		const item = (i, depth) => {
+			const n = nodeOf.get(i);
+			const it = { id: ++partId, i, idx: [i], name: K.nameOf(n, []), box: n.box, kids: [] };
+			const under = kidsM.get(i) ?? [];
+			if (n.tag === 'svg') {
+				// a drawing: its shapes by what they draw
+				const shapes = under.flatMap(all).filter((j) => paintsN(nodeOf.get(j)));
+				const kinds = new Map();
+				for (const j of shapes) { const k2 = kindOf(nodeOf.get(j)); (kinds.get(k2) ?? kinds.set(k2, []).get(k2)).push(j); }
+				it.name = n.alt || (n.box.w <= 32 && n.box.h <= 32 ? 'Icon' : 'Drawing');
+				it.idx = [i, ...shapes];
+				it.note = `svg, ${shapes.length} shape${shapes.length === 1 ? '' : 's'}`;
+				for (const [k2, js] of kinds) it.kids.push({ id: ++partId, i: js[0], idx: js, name: `${k2} (${js.length})`, box: unionBox(js), kids: [] });
+				return it;
+			}
+			if (depth > 5) { it.idx = all(i); return it; }
+			// a run of alike parts folds into one row
+			const byKey = new Map();
+			for (const j of under) { const c = nodeOf.get(j); const key = `${c.tag}|${c.paint.map((q) => q.k).sort().join(',')}|${(kidsM.get(j) ?? []).length}`; (byKey.get(key) ?? byKey.set(key, []).get(key)).push(j); }
+			for (const j of under) {
+				const c = nodeOf.get(j), key = `${c.tag}|${c.paint.map((q) => q.k).sort().join(',')}|${(kidsM.get(j) ?? []).length}`, run = byKey.get(key);
+				if (run.length >= 4) { if (run[0] !== j) continue; const idx = run.flatMap(all); it.kids.push({ id: ++partId, i: j, idx, name: `${run.length} × ${K.nameOf(c, []).replace(/ ".*$/, '')}`, box: unionBox(idx), kids: [] }); continue; }
+				it.kids.push(item(j, depth + 1));
+			}
+			it.idx = all(i);
+			return it;
+		};
+		let top = (kidsM.get(null) ?? []).map((i) => item(i, 0));
+		// the layer itself is not a level of its own: start at what it holds
+		if (top.length === 1 && !top[0].kids.length) return [];
+		if (top.length === 1 && nodeOf.get(top[0].i)?.tag !== 'svg') top = top[0].kids;
+		return top;
+	};
 	const layers = groups.map((g, k) => ({
+		parts: g.moving ? [] : partsOf(g.members),
 		n: k + 1, i: g.i, sub: g.sub, members: g.members, name: g.name, box: g.box, moving: !!g.moving, force: !g.moving && g.n.fx.opacity === '0',
 		specs: g.moving ? [{ k: 'Plays', v: 'live, in step with the page' }, { k: 'Moving parts', v: String(movingTop.size) }] : [...K.groupSpecs({ ...g.n, sub: g.sub, members: g.members }, undefined), ...(k === 0 && hiddenNote ? [hiddenNote] : [])],
 		...details[k],
 	}));
+	const partDetail = (idx) => {
+		const n = nodeOf.get(idx[0]);
+		if (!n) return null;
+		const g = { i: n.i, n, members: idx, sub: idx.length > 1 };
+		let d = {};
+		try { d = detail(g); } catch {}
+		return { specs: K.groupSpecs({ ...n, sub: g.sub, members: idx }, undefined), ...d };
+	};
 	// the view mirrors the moving parts from the page every frame (the page keeps animating underneath)
-	const mirror = [...moving].map((i) => ({ i, el: live.get(i) })).filter((m) => m.el);
+	const mirror = [...moving, ...bigMoving].map((i) => ({ i, el: live.get(i) })).filter((m) => m.el);
 	const V = { el, title, area, mirror, html: snap.html, rules: snap.rules, bg, rootW: Math.round(r0.width * 100) / 100, size: { w: r.width, h: r.height }, offset: visOff, clip: { w: r.width, h: r.height }, layers };
 	// at another width (the server lays it out there): the view's data only, nothing shown
 	if (!show) {
 		const out = { title, html: snap.html, rules: snap.rules, fonts: [...new Set(fonts)], why, bg, rootW: V.rootW, size: V.size, offset: V.offset, clip: V.clip, layers, width: innerWidth };
 		Object.defineProperty(out, 'mirror', { value: mirror, enumerable: false }); // live elements: kept in the page, never sent
+		Object.defineProperty(out, 'partDetail', { value: partDetail, enumerable: false });
 		return out;
 	}
 	V.width = innerWidth;
+	V.partDetail = partDetail;
 	window.__spView = V;
 	window.__spViewer();
-	return { html: snap.html, rules: snap.rules, fonts: [...new Set(fonts)], bg, size: V.size, why, layers: layers.map(({ specs, type, layout, holds, why: w, design, eng, authored, ...l }) => ({ ...l, authored })) };
+	return { html: snap.html, rules: snap.rules, fonts: [...new Set(fonts)], bg, size: V.size, why, layers: layers.map(({ specs, type, layout, holds, parts, why: w, design, eng, authored, ...l }) => ({ ...l, authored })) };
 }

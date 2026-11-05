@@ -57,6 +57,16 @@ check(r4.covered === 0 && r4.layers.some((n) => /Tools/.test(n)), 'an invisible 
 await wait(1800);
 const clip = await page.eval(`(() => { const r = document.querySelector('site-prompt-view').shadowRoot; const rects = [...r.querySelectorAll('clipPath rect')]; return rects.length && rects.every((x) => getComputedStyle(x).visibility === 'visible'); })()`);
 check(clip, 'clip shapes stay visible in every layer copy, so clipped art still paints');
+// the thread: a layer's parts open into their own card, with the way back (three cards, each with a drawing)
+await page.eval('window.__spViewClose?.()'); await wait(1300);
+const card5 = (t) => `<a style="display:block;background:#fff;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.1)"><h2 style="margin:0;font-size:15px">${t}</h2><p>About ${t}</p><svg width="200" height="120"><circle cx="60" cy="60" r="40" fill="none" stroke="#999"/><path d="M0 0L200 120" stroke="#999"/><path d="M0 120L200 0" stroke="#999"/></svg></a>`;
+const html5 = `<body style="margin:0;font-family:Helvetica"><div id="w" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;width:900px;margin:40px;background:#eee;padding:8px">${card5('Guides')}${card5('Tools')}${card5('Cases')}</div></body>`;
+await page.send('Page.navigate', { url: 'data:text/html,' + encodeURIComponent(html5) }); await wait(600);
+await page.eval(`window.__spTheme = ${JSON.stringify(THEME)}; window.__spIcons = ${JSON.stringify(ICONS)}; window.__spKit = (${spKit})(); window.__spSnap = ${snapshot}; window.__spViewer = ${viewer}; window.__spInstant = ${instant};`);
+await page.eval(`window.__spInstant(document.getElementById('w'), 'Cards')`); await wait(2200);
+const thread = await page.eval(`(async () => { const r = document.querySelector('site-prompt-view').shadowRoot; const V = window.__spView; const k = V.layers.findIndex((l) => (l.parts ?? []).some(function f(it) { return it.name === 'Drawing' || (it.kids ?? []).some(f); })); if (k < 0) return { k, names: V.layers.map((l) => l.name) }; (r.querySelector('.label[data-k="' + k + '"]') ?? r.querySelectorAll('.callout')[0])?.click(); await new Promise((z) => setTimeout(z, 400)); const rows = [...r.querySelectorAll('.spec .pt')]; const d = rows.find((x) => /^Drawing/.test(x.querySelector('.nm').textContent)); d?.click(); await new Promise((z) => setTimeout(z, 300)); const head = r.querySelector('.spec .ch').textContent; const kinds = [...r.querySelectorAll('.spec .pt .nm')].map((x) => x.textContent); r.querySelector('.spec [data-c=back]')?.click(); await new Promise((z) => setTimeout(z, 200)); return { k, head, kinds, back: !r.querySelector('.spec .crumbs') }; })()`);
+check(/Drawing/.test(thread.head ?? '') && thread.kinds?.some((x) => /^Circles/.test(x)) && thread.kinds?.some((x) => /^(Lines|Shapes)/.test(x)), 'a drawing in a layer opens on its own, with its circles and lines as parts', thread);
+check(thread.back, 'and Back returns to the layer', thread);
 close();
 console.log(failures ? `\n${failures} failed` : '\nall passed');
 process.exit(failures ? 1 : 0);
