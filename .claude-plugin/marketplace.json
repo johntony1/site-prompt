@@ -1,6 +1,6 @@
 {
 	"name": "site-prompt",
-	"owner": { "name": "site-prompt" },
+	"owner": { "name": "johntony1", "url": "https://github.com/johntony1" },
 	"plugins": [
 		{
 			"name": "site-prompt",

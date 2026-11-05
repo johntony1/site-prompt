@@ -5,11 +5,12 @@ copy of the page, and a check that your rebuild matches. Click any part of a pag
 
 A Claude Code (and Codex) plugin. Plain Node 22+ and the Chrome already on your machine; nothing to install.
 
-    sh install.sh                       # then, in any Claude Code session:
+    git clone https://github.com/johntony1/site-prompt && sh site-prompt/install.sh
+    # then, in any Claude Code session:
     /site-prompt https://linear.app
     /site-prompt pick https://linear.app     # hover what you like, click it, Get prompts
 
-(Or as a plugin: /plugin marketplace add <this repo>, then /site-prompt:prompt <link>.)
+(Or as a plugin: `/plugin marketplace add johntony1/site-prompt`, then `/site-prompt:prompt <link>`.)
 
 ## What you get
 
@@ -34,6 +35,11 @@ clone, checked pixel by pixel.
 Text, Illustration, Section, Component); click what you like, optionally say what you like about it, pick as many as
 you want, press **Get prompts**. Each pick becomes a prompt with its exact code, states, type or artwork, shown in
 the chat, saved under `picks/`, and copied to the clipboard.
+
+- **Area.** Press Area (or A) and drag a rectangle to take everything inside it.
+- **Bigger, smaller.** ↑ picks what holds the hovered thing, ↓ goes back.
+- **Hold.** A menu that opens on hover closes when the pointer leaves. Open it, press Hold (or H) and the page stays
+  as it is while you pick inside it; H again lets go.
 
 No extension and no app: it runs in **your own Chrome** when remote debugging is on (`chrome://inspect/#remote-debugging`,
 Chrome 144 or later; Chrome asks you to allow each session), and otherwise in a Chrome window it opens for you.
@@ -69,6 +75,20 @@ card. You get a lesson instead of a copy: an exploded view of its layers, what e
 behind it (stacked shadows, gradient masks, `::before` layers, tilts, what is hidden until hover), and the build in
 steps, each with a picture of how far yours should look.
 
+It is also taken apart right on the page, in a second:
+
+- **Specs** for flat things (a nav bar, a card list): laid flat, with callout cards for fills, type, radius and
+  padding joined to each part, like a Figma spec. **3D** for stacked things (an illustration, a card over a glow): the
+  layers lift off and split apart; drag to turn, one click switches between seen from above and facing you.
+- **A card per layer** on the right: why it works, design and engineering details (spacing grid, corner nesting,
+  elevation, tokens, states, hit size, focus style), the site's own CSS as written, and Copy prompt or Copy CSS.
+- **The thread.** Each layer lists its parts as a tree: a card opens into its title, its text and its drawing, a
+  drawing into its lines and circles. Click a part (or double click it on the canvas) for its own card, with the
+  way back above it.
+- **Live.** Animations and canvas drawings keep playing inside the view, in step with the page.
+- **Every size.** Phone, Tablet, Laptop and Big screen tabs show how it lays out at each width. Zoom with the wheel
+  or the + and - buttons.
+
 ## Tools
 
 - `site_read`: read and measure a page, write the folder above.
@@ -86,3 +106,7 @@ measured. For learning, redesigns or your own product: if you publish a rebuild,
 images.
 
     node test/test.mjs     # end to end against a local page with known answers
+    node test/view.mjs     # the breakdown view
+    node test/pick.mjs     # pick mode end to end
+
+MIT licence.
