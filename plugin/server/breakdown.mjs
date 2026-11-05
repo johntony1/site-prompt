@@ -150,7 +150,7 @@ function howOf(n, states, motion = null) {
 		L.push(m ? `hidden at rest, it comes in ${WHEN[m.trigger] ?? m.trigger}${m.delay > 20 ? ` (${m.delay} ms after)` : ''}, over ${m.exact?.duration ?? m.duration} ms` : hoverKeys.length ? 'hidden at rest, it fades in on hover' : 'hidden at rest (opacity 0): nothing in the recorded session (load, scroll, hover, press) brought it in, so something else does, like a click elsewhere or a state of the page');
 	} else if (hoverKeys.length) L.push(`changes on hover: ${hoverKeys.flatMap(([, d]) => d).slice(0, 3).join('; ').slice(0, 160)}`);
 	if (loop) L.push(`keeps moving on its own (${loop.css ? `CSS animation "${loop.css.name}", ${Math.round(loop.css.duration)} ms a cycle` : loop.continuous ? 'continuously' : `every ${loop.period} ms`})`);
-	else for (const m of mine.filter((x) => x.prop !== 'opacity' || n.fx.opacity !== '0').slice(0, 2)) L.push(`moves ${WHEN[m.trigger] ?? m.trigger}: ${m.prop}${m.spring ? ', on a spring' : m.exact ? `, ${m.exact.duration} ms ${m.exact.easing}` : m.bezier ? `, ${m.duration} ms cubic-bezier(${m.bezier.c.join(', ')})` : ''}`);
+	else for (const m of mine.filter((x) => x.prop !== 'opacity' || n.fx.opacity !== '0').slice(0, 2)) L.push(`moves ${WHEN[m.trigger] ?? m.trigger}: ${m.prop}${m.spring ? ', on a spring' : m.exact ? `, ${m.exact.duration} ms, ${/^eased per keyframe/.test(m.exact.easing ?? '') ? 'eased per keyframe' : m.exact.easing}` : m.bezier ? `, ${m.duration} ms cubic-bezier(${m.bezier.c.join(', ')})` : ''}`);
 	return [...new Set(L)];
 }
 

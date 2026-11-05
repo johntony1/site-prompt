@@ -314,7 +314,7 @@ export function analyse(rec, exact) {
 	for (const c of exact.css) if (c.type === 'CSSAnimation' && (c.iterations == null || c.iterations > 50) && !loops.some((l) => l.node === c.node && !!l.pseudo === !!c.pseudo)) loops.push({ key: `${c.node}|${c.name}`, node: c.node, pseudo: c.pseudo ? '::?' : '', prop: 'animation', continuous: true, css: c });
 	// the page's own numbers, where it gave them: every move of that element inside an exact animation's window is that animation
 	const sources = [
-		...rec.waapi.map((w, k) => ({ id: `w${k}`, node: w.node, pseudo: false, t: w.t + (w.options?.delay ?? 0), dur: w.options?.duration ?? 0, exact: { via: 'element.animate (Web Animations; Motion and Framer Motion use it)', duration: w.options?.duration, delay: w.options?.delay ?? 0, easing: w.options?.easing ?? (w.keyframes?.some?.((f) => f.easing) ? 'per keyframe, see below' : 'linear'), keyframes: w.keyframes } })),
+		...rec.waapi.map((w, k) => ({ id: `w${k}`, node: w.node, pseudo: false, t: w.t + (w.options?.delay ?? 0), dur: w.options?.duration ?? 0, exact: { via: 'element.animate (Web Animations; Motion and Framer Motion use it)', duration: w.options?.duration, delay: w.options?.delay ?? 0, easing: w.options?.easing ?? (w.keyframes?.some?.((f) => f.easing) ? 'eased per keyframe (see the element.animate call below)' : 'linear'), keyframes: w.keyframes } })),
 		...exact.css.filter((c) => c.type !== 'WebAnimation').map((c, k) => ({ id: `c${k}`, node: c.node, pseudo: c.pseudo, prop: c.type === 'CSSTransition' ? c.name : null, t: c.startTime + (c.delay ?? 0), dur: c.duration, exact: { via: c.type === 'CSSTransition' ? 'CSS transition' : `CSS animation "${c.name}"`, duration: Math.round(c.duration), delay: Math.round(c.delay ?? 0), easing: c.easing, iterations: c.iterations, keyframes: c.keyframes } })),
 	];
 	for (const o of kept) {
@@ -550,9 +550,11 @@ export function motionMarkdown(mo, { short = false } = {}) {
 		for (const m of timed.sort((a, b) => a.start - b.start)) {
 			const k = m.exactId ? `${m.node}${m.pseudo}#${m.exactId}` : `${m.node}${m.pseudo}@${Math.round(m.delay / 40)}`;
 			const prev = lines.get(k);
-			if (prev) prev.parts.push(change(m));
-			else lines.set(k, { m, parts: [change(m)] });
+			if (prev) prev.ms.push(m);
+			else lines.set(k, { m, ms: [m] });
 		}
+		// a reading of a frame or two at the edge of a longer move is not a move of its own
+		for (const x of lines.values()) { const real = x.ms.filter((m) => m.frames > 2); x.parts = (real.length ? real : x.ms).map(change); }
 		const list = [...lines.values()].slice(0, short ? 8 : 24);
 		for (const { m, parts: p } of list) L.push(`- ${who(m, desc)}: ${p.join('; ')}, ${curve(m)}${m.delay > 20 && !m.exact?.delay ? `, starting ${m.delay} ms after the ${trig === 'scroll' ? 'scroll begins' : trig}` : ''}.`);
 		// stagger: the same move on siblings, started at even steps
@@ -575,13 +577,13 @@ export function motionMarkdown(mo, { short = false } = {}) {
 	if (mo.gsap?.length) {
 		any = true;
 		L.push('### GSAP, exactly as the page calls it');
-		for (const g of mo.gsap.slice(0, 12)) L.push(`- ${g.m}(${g.sel ? `"${g.sel}"` : 'element'} → ${g.nodes.map((n) => `.c${n}`).join(', ')}, ${JSON.stringify(g.vars).slice(0, 300)}${g.from ? `, from ${JSON.stringify(g.from).slice(0, 200)}` : ''})`);
+		for (const g of mo.gsap.slice(0, 12)) L.push(`- ${g.m}(${g.sel ? `"${g.sel}"` : 'element'} → ${g.nodes.map((n) => `.c${n}`).join(', ')}, ${JSON.stringify(g.vars).slice(0, 1200)}${g.from ? `, from ${JSON.stringify(g.from).slice(0, 800)}` : ''})`);
 		L.push('');
 	}
 	if (mo.waapi?.length) {
 		any = true;
 		L.push('### element.animate, exactly as the page calls it');
-		for (const w of mo.waapi.slice(0, 12)) L.push(`- .c${w.node}.animate(${JSON.stringify(w.keyframes).slice(0, 300)}, ${JSON.stringify(w.options).slice(0, 200)})`);
+		for (const w of mo.waapi.slice(0, 12)) L.push(`- .c${w.node}.animate(${JSON.stringify(w.keyframes).slice(0, 2400)}, ${JSON.stringify(w.options).slice(0, 400)})`);
 		L.push('');
 	}
 	if (mo.assets?.length) { L.push(`Animation files it loads (use them as they are): ${mo.assets.slice(0, 6).join(', ')}`); L.push(''); }
