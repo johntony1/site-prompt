@@ -13,6 +13,7 @@ export const THEME = String.raw`
 .chip{position:fixed;pointer-events:none;display:none;align-items:center;gap:6px;height:24px;padding:0 8px;background:var(--panel);color:var(--text);border:1px solid var(--line2);border-radius:7px;font-size:11.5px;font-weight:550;line-height:1;white-space:nowrap;box-shadow:0 6px 16px -4px rgba(0,0,0,.5)}
 .chip:before{content:"";width:6px;height:6px;border-radius:2px;background:var(--accent)}
 .chip i{font-style:normal;color:var(--muted);font-weight:450;font-variant-numeric:tabular-nums}
+.chip i.keys{margin-left:4px;padding-left:8px;box-shadow:inset 1px 0 0 var(--line2);color:var(--faint)}
 .ring{position:fixed;pointer-events:none;border:1px solid var(--accent);border-radius:6px;box-shadow:0 0 0 3px rgba(61,123,255,.12)}
 .badge{appearance:none;border:0;padding:0;cursor:pointer;font-family:inherit;transition:transform 120ms cubic-bezier(.2,0,0,1);position:fixed;pointer-events:auto;width:20px;height:20px;border-radius:6px;background:var(--accent2);color:#fff;font-size:11px;font-weight:650;display:grid;place-items:center;font-variant-numeric:tabular-nums;box-shadow:0 0 0 1.5px var(--bg),0 4px 10px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.2)}
 

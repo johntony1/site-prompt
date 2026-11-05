@@ -77,9 +77,26 @@ export function overlay() {
 		const show = () => {
 			if (!cur || !picking || open || window.__spViewerOpen) { hl.style.display = chip.style.display = 'none'; return; }
 			const r = place(hl, cur);
-			chip.innerHTML = picks.some((p) => p.el === cur) ? `Deselect<i>${picks.find((p) => p.el === cur).n}</i>` : describe(cur).label;
+			chip.innerHTML = (picks.some((p) => p.el === cur) ? `Deselect<i>${picks.find((p) => p.el === cur).n}</i>` : describe(cur).label) + `<i class="keys">↑ bigger${down.length ? ' · ↓ back' : ''}</i>`;
 			Object.assign(chip.style, { display: 'flex', left: Math.max(6, Math.min(innerWidth - 200, r.left - 3)) + 'px', top: (r.top > 32 ? r.top - 28 : Math.min(innerHeight - 30, r.bottom + 8)) + 'px' });
 		};
+		// a see-through layer laid over the content (connector lines, a glow, a pattern) is not what they point at:
+		// look beneath it for the real thing
+		const seeThrough = (el) => {
+			const t = el.tagName.toLowerCase(), cs = getComputedStyle(el);
+			if (!/absolute|fixed/.test(cs.position)) return false;
+			const r = el.getBoundingClientRect();
+			if (r.width * r.height < 60000) return false;
+			if ((el.innerText || '').trim()) return false;
+			return t === 'svg' || t === 'canvas' || t === 'img' || t === 'video' || el.getAttribute('aria-hidden') === 'true' || !el.querySelector('a,button,input,img,p,h1,h2,h3,h4,span');
+		};
+		const under = (x, y) => {
+			const stack = document.elementsFromPoint(x, y).filter((el) => el !== host && el !== document.documentElement && el !== document.body).map(target);
+			const first = stack[0];
+			if (!first || !seeThrough(first)) return null;
+			return stack.find((el) => el !== first && !first.contains(el) && !seeThrough(el)) ?? null;
+		};
+		const down = []; // where ↑ came from, so ↓ goes back
 		const target = (el) => {
 			const svg = el.closest && el.closest('svg');
 			if (svg && svg.ownerSVGElement == null) return svg; // a part of an icon or a drawing: the whole svg
@@ -140,8 +157,8 @@ export function overlay() {
 		for (const t of ['mousedown', 'mouseup', 'pointerdown', 'pointerup', 'dblclick', 'contextmenu', 'auxclick']) addEventListener(t, block, true);
 		addEventListener('mousemove', (e) => {
 			if (window.__spViewerOpen || !picking || ours(e) || open) return;
-			const el = target(e.composedPath()[0] instanceof Element ? e.composedPath()[0] : e.target);
-			if (el && el !== cur && el !== document.documentElement && el !== document.body) { cur = el; show(); }
+			const el = under(e.clientX, e.clientY) ?? target(e.composedPath()[0] instanceof Element ? e.composedPath()[0] : e.target);
+			if (el && el !== cur && el !== document.documentElement && el !== document.body) { cur = el; down.length = 0; show(); }
 		}, true);
 		addEventListener('click', (e) => {
 			if (ours(e) || window.__spViewerOpen) return;
@@ -165,7 +182,8 @@ export function overlay() {
 			if (window.__spViewerOpen) return;
 			if (open && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send('send'); return; }
 			if (e.key === 'Escape') { e.preventDefault(); if (open) closePop(); else setPicking(!picking); return; }
-			if (picking && !open && e.key === 'ArrowUp' && cur?.parentElement && cur.parentElement !== document.body) { e.preventDefault(); cur = cur.parentElement; show(); }
+			if (picking && !open && e.key === 'ArrowUp' && cur?.parentElement && cur.parentElement !== document.body) { e.preventDefault(); down.push(cur); cur = cur.parentElement; show(); }
+			if (picking && !open && e.key === 'ArrowDown' && down.length) { e.preventDefault(); cur = down.pop(); show(); }
 		}, true);
 		const send = async (a) => {
 			closePop();
@@ -204,7 +222,7 @@ export function overlay() {
 			if (t) { const a = t.getBoundingClientRect(), b = bar.getBoundingClientRect(); over = !(a.right + 24 < b.left || a.left - 24 > b.right || a.bottom + 24 < b.top || a.top - 24 > b.bottom); }
 			bar.style.visibility = over ? 'hidden' : '';
 		};
-		window.__spTest = { rect: (sel) => { const r = root.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, note: (t) => { note.value = t; }, keep: () => closePop(), style: setStyle, clear: () => (clearBtn.hidden ? '' : clearBtn.textContent), status: () => (status.hidden ? '' : status.textContent) };
+		window.__spTest = { rect: (sel) => { const r = root.querySelector(sel).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, note: (t) => { note.value = t; }, keep: () => closePop(), cur: () => (cur ? `${cur.tagName.toLowerCase()} ${Math.round(cur.getBoundingClientRect().width)}x${Math.round(cur.getBoundingClientRect().height)} ${(cur.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 30)}` : null), style: setStyle, clear: () => (clearBtn.hidden ? '' : clearBtn.textContent), status: () => (status.hidden ? '' : status.textContent) };
 	};
 	start();
 }
