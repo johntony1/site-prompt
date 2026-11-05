@@ -126,6 +126,17 @@ export function snapshot(sel) {
 		n.setAttribute('data-sp-n', String(i));
 		let d = decls(cs, defOf(n), parent, n === root);
 		if (n === root) d = d.filter((x) => !/^(margin|position|top|left|right|bottom|z-index|grid-area|grid-row|grid-column|order|flex-grow|flex-shrink|flex-basis|align-self|justify-self)(-|:)/.test(x)).concat(cs.position === 'fixed' || cs.position === 'absolute' || cs.position === 'sticky' ? ['position:relative'] : cs.position === 'relative' ? ['position:relative'] : []);
+		// computed sizes come rounded to 6 digits (248.734px for 248.734375): a row whose children add up to its width
+		// would wrap in the copy. The box itself is exact (1/64 px): use it when it is the same size.
+		if (cs.boxSizing === 'border-box' && n.namespaceURI !== 'http://www.w3.org/2000/svg') {
+			const bx = n.getBoundingClientRect();
+			d = d.map((x) => {
+				const m = x.match(/^(width|height):([\d.]+)px$/);
+				if (!m) return x;
+				const exact = m[1] === 'width' ? bx.width : bx.height;
+				return Math.abs(exact - parseFloat(m[2])) < 0.01 ? `${m[1]}:${exact}px` : x;
+			});
+		}
 		rules.push(`.c${i}{${d.join(';')}}`);
 		for (const ps of ['::before', '::after']) {
 			const pc = getComputedStyle(n, ps);
@@ -233,7 +244,7 @@ export async function clone(url, outDir, { selector, wait: waitS = 180, log = ()
 		await goto(page, url);
 		if (await page.run(dismissConsent).catch(() => false)) await wait(500);
 		if (selector) {
-			const ok = await page.eval(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return false; e.setAttribute('data-sp-picked', '1'); e.scrollIntoView({ block: 'center' }); return true; })()`);
+			const ok = await page.eval(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return false; e.setAttribute('data-sp-picked', '1'); e.scrollIntoView({ block: 'center', behavior: 'instant' }); return true; })()`);
 			if (!ok) throw new ToolError(`Nothing on the page matches the selector ${selector}.`);
 			await wait(500);
 		} else {
@@ -258,7 +269,7 @@ export async function clone(url, outDir, { selector, wait: waitS = 180, log = ()
 export async function extract(page, sel, outDir, url, { log = () => {}, own = false, check = true } = {}) {
 	mkdirSync(outDir, { recursive: true });
 	{
-		await page.eval(`document.querySelector(${JSON.stringify(sel)})?.scrollIntoView({ block: 'nearest', inline: 'nearest' })`).catch(() => {});
+		await page.eval(`document.querySelector(${JSON.stringify(sel)})?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })`).catch(() => {});
 		await wait(250);
 		log('snapshotting');
 		const snap = await page.run(snapshot, sel, 120_000);

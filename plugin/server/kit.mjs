@@ -97,7 +97,8 @@ export function spKit() {
 		};
 	});
 	const pad = 48;
-	return { vis: { x: R.left, y: R.top, w: R.width, h: R.height }, nodes: out, rootPage: { x: R.left + scrollX, y: R.top + scrollY }, size: { w: Math.round(R.width), h: Math.round(R.height) }, clip: { x: Math.floor(lo.x) - pad + scrollX, y: Math.floor(lo.y) - pad + scrollY, width: Math.ceil(lo.r - lo.x) + pad * 2, height: Math.ceil(lo.b - lo.y) + pad * 2 } };
+	const R0 = root.getBoundingClientRect();
+	return { vis: { x: R.left, y: R.top, w: R.width, h: R.height }, visOff: { x: Math.round(R.left - R0.left), y: Math.round(R.top - R0.top) }, nodes: out, rootPage: { x: R.left + scrollX, y: R.top + scrollY }, size: { w: Math.round(R.width), h: Math.round(R.height) }, clip: { x: Math.floor(lo.x) - pad + scrollX, y: Math.floor(lo.y) - pad + scrollY, width: Math.ceil(lo.r - lo.x) + pad * 2, height: Math.ceil(lo.b - lo.y) + pad * 2 } };
 }
 
 	const fileName = (u) => { try { return decodeURIComponent(new URL(u).pathname.split('/').pop()).replace(/-[0-9a-f]{12,}/i, '').replace(/\.\w+$/, ''); } catch { return ''; } };

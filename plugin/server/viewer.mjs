@@ -59,11 +59,11 @@ export function viewer() {
 		.plane.hot .tag{background:var(--blue);color:#fff;box-shadow:none}
 		.head{position:fixed;left:32px;top:28px;opacity:0;transform:translateY(-6px);transition:opacity .4s ease .25s,transform .5s cubic-bezier(.2,.8,.2,1) .25s}
 		.on .head{opacity:1;transform:none}
-		.head small{font:500 10.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
-		.head h2{font-size:19px;font-weight:620;color:var(--ink);letter-spacing:-.015em;margin-top:8px}
-		.head p{font-size:12.5px;color:var(--muted);margin-top:4px}
+		.head > small{font:500 10.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+		.head > h2{font-size:19px;font-weight:620;color:var(--ink);letter-spacing:-.015em;margin-top:8px}
+		.head > p{font-size:12.5px;color:var(--muted);margin-top:4px}
 		.was{margin-top:16px}
-		.was span{display:block;font:500 10.5px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+		.was > span{display:block;font:500 10.5px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
 		.thumb{position:relative;width:220px;border-radius:10px;overflow:hidden;background:var(--slab,#fff);box-shadow:0 0 0 1px var(--line2),0 12px 30px -12px rgba(0,0,0,.6)}
 		.tin{position:absolute;left:0;top:0;transform-origin:0 0}
 		.tin > img{position:absolute;left:0;top:0}
@@ -130,9 +130,9 @@ export function viewer() {
 		.callout .cr em s{width:10px;height:10px;border-radius:50%;flex:none;box-shadow:0 0 0 1px rgba(255,255,255,.25) inset}
 		.callout .cr em .pill{font:600 10.5px/1 var(--mono);color:#fff;background:#2b8cf8;padding:3px 5px;border-radius:4px}
 		svg.callines{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
-		svg.callines path{fill:none;stroke:rgba(255,255,255,.28);stroke-width:1}
+		svg.callines path{fill:none;stroke:#8a8f98;stroke-opacity:.75;stroke-width:1}
 		svg.callines path.hot{stroke:var(--blue2)}
-		svg.callines circle{fill:#09090b;stroke:rgba(255,255,255,.55);stroke-width:1.25}
+		svg.callines circle{fill:#fff;stroke:#71717a;stroke-width:1.25}
 		svg.callines circle.hot{stroke:var(--blue2)}
 		.v.specs .sld{opacity:.35;pointer-events:none}
 		.v.specs [data-a=flat]{display:none}
@@ -215,7 +215,7 @@ export function viewer() {
 	// where the element is right now: the stack starts exactly over it, and the element itself lifts off
 	const el = V.el ?? (V.path && document.querySelector(V.path));
 	let r = el?.getBoundingClientRect();
-	if (!r || !r.width || r.bottom < 0 || r.top > innerHeight) { el?.scrollIntoView({ block: 'center' }); r = el?.getBoundingClientRect() ?? { left: (innerWidth - V.size.w) / 2, top: (innerHeight - V.size.h) / 2, width: V.size.w, height: V.size.h }; }
+	if (!r || !r.width || r.bottom < 0 || r.top > innerHeight) { el?.scrollIntoView({ block: 'center', behavior: 'instant' }); r = el?.getBoundingClientRect() ?? { left: (innerWidth - V.size.w) / 2, top: (innerHeight - V.size.h) / 2, width: V.size.w, height: V.size.h }; }
 	const was = V.was ?? (el ? el.style.visibility : '');
 	if (el) el.style.visibility = 'hidden';
 	if (V.again) r = { left: (innerWidth - V.size.w) / 2, top: (innerHeight - V.size.h) / 2, width: V.size.w, height: V.size.h };
@@ -440,12 +440,14 @@ export function viewer() {
 		if (!pick.length) pick = V.layers.map((l, k) => ({ l, k, q: quadOf(k) }));
 		pick = pick.sort((a, b) => (b.l.moving - a.l.moving) || (b.l.box?.w * b.l.box?.h || 0) - (a.l.box?.w * a.l.box?.h || 0)).slice(0, 8);
 		// one column on the left (the detail card has the right), as many as fit the screen
-		const avail = innerHeight - 84 - 96;
+		// the column starts under the title and the preview of what was picked
+		const top0 = Math.max(84, ($('.head')?.getBoundingClientRect().bottom ?? 72) + 12);
+		const avail = innerHeight - top0 - 96;
 		const per = avail / Math.max(1, pick.length) >= 120 ? 4 : avail / Math.max(1, pick.length) >= 76 ? 2 : 1;
 		const fits = Math.max(1, Math.floor(avail / (per === 4 ? 112 : per === 2 ? 72 : 50)));
 		const list = pick.slice(0, fits).sort((a, b) => (a.q.t + a.q.b) - (b.q.t + b.q.b));
 		const colW = Math.min(216, Math.max(150, comp.l - 64 - 16));
-		let floor = 84;
+		let floor = top0;
 		for (const x of list) {
 			const rows = keyRows(x.l).slice(0, per);
 			const el2 = document.createElement('div');
@@ -472,7 +474,10 @@ export function viewer() {
 		if (mode !== 'specs') { callSvg.innerHTML = ''; return; }
 		let out = '';
 		for (const c of calls) {
-			const b = c.el.getBoundingClientRect(), q = quadOf(c.k);
+			const b = c.el.getBoundingClientRect(), q0 = quadOf(c.k), lb = V.html && V.layers[c.k].box;
+			// the dot lands on the part itself, not on the 10px of slab around it
+			const fx = lb ? 10 / (lb.w + 20) : 0, fy = lb ? 10 / (lb.h + 20) : 0, qw = q0.r - q0.l, qh = q0.b - q0.t;
+			const q = { l: q0.l + qw * fx, r: q0.r - qw * fx, t: q0.t + qh * fy, b: q0.b - qh * fy };
 			const ax = c.side === 'l' ? q.l : q.r, ay = Math.max(q.t + 4, Math.min(q.b - 4, b.top + b.height / 2));
 			const sx = c.side === 'l' ? b.right : b.left, sy = b.top + b.height / 2;
 			const mx = c.side === 'l' ? Math.max(sx + 14, ax - 22) : Math.min(sx - 14, ax + 22);
@@ -790,7 +795,8 @@ export async function instant(el, title, area = null, show = true) {
 	for (let x = el; x && !bg; x = x.parentElement) { const c = getComputedStyle(x).backgroundColor; if (c && c !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(c)) bg = c; }
 	bg ??= '#ffffff';
 	const r0 = el.getBoundingClientRect(), r = { width: a.vis.w, height: a.vis.h };
-	const visOff = { x: Math.round(a.vis.x - r0.left), y: Math.round(a.vis.y - r0.top) };
+	// measured in the same moment as the anatomy (the page may still be scrolling smoothly)
+	const visOff = a.visOff ?? { x: 0, y: 0 };
 	const hiddenNote = covered.size ? { k: 'Hidden behind others', v: `${covered.size} ${covered.size > 1 ? 'parts' : 'part'}` } : null;
 	const layers = groups.map((g, k) => ({
 		n: k + 1, i: g.i, sub: g.sub, members: g.members, name: g.name, box: g.box, moving: !!g.moving, force: !g.moving && g.n.fx.opacity === '0',

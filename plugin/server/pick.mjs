@@ -104,7 +104,7 @@ async function phoneIn(page, sel, dir, vw, vh) {
 	await viewport(page, 390, 844, false);
 	try {
 		await wait(500);
-		const box = await page.eval(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height }; })()`);
+		const box = await page.eval(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; e.scrollIntoView({ block: 'center', behavior: 'instant' }); const r = e.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height }; })()`);
 		await wait(250);
 		const narrow = await page.run(layoutOf, { sel, props: LAYOUT });
 		if (!box || !narrow) return null;
@@ -175,7 +175,7 @@ export async function processBatch(batch, baseDir, { log = () => {} } = {}) {
 					r = { file, outDir: dir, where: 'page', snap: { nodes: (inst.html.match(/class="c\d+/g) ?? []).length, tag: d.tag, text: d.text }, states: {}, stateRules: [], code: { html: inst.html, css: [...inst.fonts, ...inst.rules].join('\n'), fonts: [] }, faces: inst.fonts.length, keyframes: 0, ssim: null, diff: null, size: { original: [W, H], clone: [W, H], ok: true }, sheet: null, unchecked: true, mobile: null };
 				}
 				const c = !r && elPath ? await copyPage().catch(() => null) : null;
-				const inCopy = !r && c && await c.page.eval(`(() => { const e = document.querySelector(${JSON.stringify(elPath)}); if (!e) return false; const r = e.getBoundingClientRect(); if (!r.width || !r.height) return false; document.querySelectorAll('[data-sp-copy]').forEach((x) => x.removeAttribute('data-sp-copy')); e.setAttribute('data-sp-copy', '1'); e.scrollIntoView({ block: 'center' }); return true; })()`).catch(() => false);
+				const inCopy = !r && c && await c.page.eval(`(() => { const e = document.querySelector(${JSON.stringify(elPath)}); if (!e) return false; const r = e.getBoundingClientRect(); if (!r.width || !r.height) return false; document.querySelectorAll('[data-sp-copy]').forEach((x) => x.removeAttribute('data-sp-copy')); e.setAttribute('data-sp-copy', '1'); e.scrollIntoView({ block: 'center', behavior: 'instant' }); return true; })()`).catch(() => false);
 				if (r) {
 					// done above
 				} else if (inCopy) {
@@ -371,7 +371,7 @@ async function atPhoneWidth(s, sel, dir, url) {
 		const mark = `(() => { const e = document.querySelector(${JSON.stringify(where)}); if (!e) return false; e.setAttribute('data-sp-phone', '1'); return true; })()`;
 		if (!(await p.eval(mark).catch(() => false))) return null;
 		const psel = '[data-sp-phone]';
-		const box = await p.eval(`(() => { const e = document.querySelector('${psel}'); e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height }; })()`);
+		const box = await p.eval(`(() => { const e = document.querySelector('${psel}'); e.scrollIntoView({ block: 'center', behavior: 'instant' }); const r = e.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height }; })()`);
 		await wait(250);
 		const narrow = await p.run(layoutOf, { sel: psel, props: LAYOUT });
 		if (!box || !narrow) return null;
@@ -444,7 +444,7 @@ export async function place(devUrl, picks, { seconds = 300, wantTokens = false }
 	if (got?.placed?.length) {
 		// the page with the spot marked, as the person saw it
 		const first = got.placed[0];
-		await d.page.eval(`document.querySelector('[data-sp-place="${first.n}"]')?.scrollIntoView({ block: 'center' })`).catch(() => {});
+		await d.page.eval(`document.querySelector('[data-sp-place="${first.n}"]')?.scrollIntoView({ block: 'center', behavior: 'instant' })`).catch(() => {});
 		await wait(250);
 		const vp = await d.page.eval('({ x: scrollX, y: scrollY, w: innerWidth, h: innerHeight })').catch(() => ({ x: 0, y: 0, w: 1440, h: 900 }));
 		snapshot = await shot(d.page, { beyond: false, x: vp.x, y: vp.y, width: vp.w, height: vp.h, format: 'jpeg', quality: 80 }).catch(() => null);
@@ -493,7 +493,7 @@ export async function viewsAtSizes(url, elPath, title, { log = () => {} } = {}) 
 		for (const z of SIZES) {
 			await viewport(page, z.w, z.h);
 			await wait(700);
-			const data = await page.eval(`(async () => { const e = document.querySelector(${JSON.stringify(elPath)}); if (!e) return null; const r = e.getBoundingClientRect(); if (r.width < 2 || r.height < 2) return { hidden: true }; e.scrollIntoView({ block: 'center' }); await new Promise((res) => setTimeout(res, 250)); return window.__spInstant(e, ${JSON.stringify(title)}, null, false); })()`, 60_000).catch(() => null);
+			const data = await page.eval(`(async () => { const e = document.querySelector(${JSON.stringify(elPath)}); if (!e) return null; const r = e.getBoundingClientRect(); if (r.width < 2 || r.height < 2) return { hidden: true }; e.scrollIntoView({ block: 'center', behavior: 'instant' }); await new Promise((res) => setTimeout(res, 400)); return window.__spInstant(e, ${JSON.stringify(title)}, null, false); })()`, 60_000).catch(() => null);
 			await updateView({ size: { ...z, data: data ?? { missing: true } } }).catch(() => {});
 		}
 	} finally {

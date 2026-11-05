@@ -14,7 +14,7 @@ export async function match(originalPng, url, selector) {
 	const { page, close } = await launch({ width: 1440, height: 900 });
 	try {
 		await goto(page, url, { settle: 4000 });
-		const b = await page.eval(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height }; })()`);
+		const b = await page.eval(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return null; e.scrollIntoView({ block: 'center', behavior: 'instant' }); const r = e.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height }; })()`);
 		if (!b) throw new ToolError(`Nothing on ${url} matches ${selector}.`);
 		await page.eval(`(() => { const s = document.createElement('style'); s.textContent = '*,*::before,*::after{transition:none!important;animation-play-state:paused!important}'; document.head.appendChild(s); })()`);
 		await wait(150);
