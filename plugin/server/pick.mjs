@@ -16,6 +16,7 @@ import { project } from './project.mjs';
 import { placer, tokens } from './place.mjs';
 import { ICONS, THEME } from './theme.mjs';
 import { motionMarkdown, recordMotion } from './motion.mjs';
+import { viewer } from './viewer.mjs';
 const LOOK = `window.__spTheme = ${JSON.stringify(THEME)}; window.__spIcons = ${JSON.stringify(ICONS)};`;
 
 let session = null; // { page, close, own, url, queue, waiter }
@@ -72,47 +73,118 @@ const slug = (t) => String(t ?? '').toLowerCase().replace(/[^\w]+/g, '-').replac
 const NAME = { illustration: 'illustration', button: 'button', text: 'text', section: 'section', component: 'component' };
 
 /** Every pick in a batch → its folder, component.html, screenshots and PROMPT.md. */
+/** In a copy of the page: wait until the element's own animations have finished (an entrance would be caught half way). */
+async function settled(page, sel) {
+	for (let t0 = Date.now(); Date.now() - t0 < 6000; await wait(150)) {
+		const busy = await page.eval(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return 0; return e.getAnimations({ subtree: true }).filter((a) => a.playState === 'running' && a.effect?.getComputedTiming?.().endTime !== Infinity).length; })()`).catch(() => 0);
+		if (!busy) return;
+	}
+}
+
+/** The same element at 390 px wide, in the copy (never the person's page). */
+async function phoneIn(page, sel, dir, vw, vh) {
+	const wide = await page.run(layoutOf, { sel, props: LAYOUT });
+	if (!wide) return null;
+	await viewport(page, 390, 844, false);
+	try {
+		await wait(500);
+		const box = await page.eval(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height }; })()`);
+		await wait(250);
+		const narrow = await page.run(layoutOf, { sel, props: LAYOUT });
+		if (!box || !narrow) return null;
+		const hidden = narrow[0].hidden;
+		if (!hidden && box.width >= 1 && box.height >= 1) {
+			const pad = 12;
+			writeFileSync(path.join(dir, 'original-mobile.png'), await shot(page, { beyond: true, x: Math.max(0, Math.floor(box.x) - pad), y: Math.max(0, Math.floor(box.y) - pad), width: Math.min(390, Math.ceil(box.width) + pad * 2), height: Math.ceil(box.height) + pad * 2, format: 'png' }));
+		}
+		const changes = [];
+		for (let i = 0; i < Math.min(wide.length, narrow.length) && changes.length < 40; i++) {
+			const a = wide[i], b = narrow[i];
+			if (a.hidden !== b.hidden) { changes.push(`.c${i}: ${b.hidden ? 'hidden on phones' : 'only shown on phones'}`); continue; }
+			if (b.hidden) continue;
+			const d = LAYOUT.filter((k) => a[k] !== b[k]).map((k) => `${kebab(k)} ${a[k]} → ${b[k]}`);
+			if (d.length) changes.push(`.c${i}: ${d.join('; ')}`);
+		}
+		return { hidden, size: [Math.round(box.width), Math.round(box.height)], changes, shot: hidden ? null : 'original-mobile.png' };
+	} finally {
+		await viewport(page, vw, vh);
+		await wait(200);
+	}
+}
+
+/**
+ * Every pick in a batch → its folder, component.html, screenshots, motion and PROMPT.md. All the work that changes a
+ * page (forcing hover and press, freezing animations, resizing, scrolling) happens in a copy of the page in a Chrome
+ * of its own; the person's page is only read. Only when the pick is not in a fresh copy (behind their login, a pop-up
+ * they opened) is it read on their page.
+ */
 export async function processBatch(batch, baseDir, { log = () => {} } = {}) {
 	const s = session;
 	if (!s) throw new ToolError('The picking session closed.');
 	const host = new URL(batch.url).host.replace(/^www\./, '').replace(/[^\w.-]+/g, '-');
 	const out = [];
-	for (const p of batch.picks) {
-		const sel = `[data-sp-pick="${p.n}"]`;
-		const d = await s.page.run(details, sel).catch(() => null);
-		if (!d) { out.push({ ...p, error: 'it was no longer on the page (it changed or you navigated away)' }); continue; }
-		const name = `${String(p.n).padStart(2, '0')}-${p.kind}${d.text ? '-' + slug(d.text.split('\n')[0]) : ''}`;
-		const dir = path.join(baseDir, host, 'picks', name);
-		mkdirSync(dir, { recursive: true });
-		await s.page.eval(`window.__spStatus?.(${JSON.stringify(`Reading ${p.n}. ${p.label}…`)})`).catch(() => {});
-		// how it moves: recorded in a Chrome of its own while the copy is made here
-		const elPath = await s.page.run(pathTo, sel).catch(() => null);
-		const safeClick = await s.page.eval(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return false; if (e.closest('a[href]') || e.closest('form')) return false; return e.matches('button[type=button], summary, [aria-expanded], [role=tab], [role=switch], [role=button]') || !!e.querySelector(':scope > summary'); })()`).catch(() => false);
-		const motionRun = elPath ? recordMotion({ url: batch.url, elPath, dir, safeClick, log }).catch(() => null) : Promise.resolve(null);
-		try {
-			await s.page.eval(`window.__spHide?.(true, ${JSON.stringify(sel)})`).catch(() => {});
-			const r = await extract(s.page, sel, dir, batch.url, { own: s.own, log }).finally(() => s.page.eval('window.__spHide?.(false)').catch(() => {}));
-			await s.page.eval(`window.__spStatus?.(${JSON.stringify(`Checking ${p.n} at phone width…`)})`).catch(() => {});
-				r.mobile = await atPhoneWidth(s, sel, dir, batch.url).catch(() => null);
+	const vp = await s.page.eval('({ w: innerWidth, h: innerHeight })').catch(() => ({ w: 1440, h: 900 }));
+	let copy = null;
+	const copyPage = async () => {
+		if (copy) return copy;
+		copy = await launch({ width: vp.w, height: vp.h });
+		await goto(copy.page, batch.url, { settle: 5000 });
+		return copy;
+	};
+	try {
+		for (const p of batch.picks) {
+			const sel = `[data-sp-pick="${p.n}"]`;
+			const d = await s.page.run(details, sel).catch(() => null);
+			if (!d) { out.push({ ...p, error: 'it was no longer on the page (it changed or you navigated away)' }); continue; }
+			const name = `${String(p.n).padStart(2, '0')}-${p.kind}${d.text ? '-' + slug(d.text.split('\n')[0]) : ''}`;
+			const dir = path.join(baseDir, host, 'picks', name);
+			mkdirSync(dir, { recursive: true });
+			await s.page.eval(`window.__spStatus?.(${JSON.stringify(`Reading ${p.n}. ${p.label}…`)})`).catch(() => {});
+			const elPath = await s.page.run(pathTo, sel).catch(() => null);
+			const safeClick = await s.page.eval(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return false; if (e.closest('a[href]') || e.closest('form')) return false; return e.matches('button[type=button], summary, [aria-expanded], [role=tab], [role=switch], [role=button]') || !!e.querySelector(':scope > summary'); })()`).catch(() => false);
+			// how it moves: recorded in another Chrome of its own, at the same time
+			const motionRun = elPath ? recordMotion({ url: batch.url, elPath, dir, safeClick, log }).catch(() => null) : Promise.resolve(null);
+			try {
+				let r = null;
+				const c = elPath ? await copyPage().catch(() => null) : null;
+				const inCopy = c && await c.page.eval(`(() => { const e = document.querySelector(${JSON.stringify(elPath)}); if (!e) return false; const r = e.getBoundingClientRect(); if (!r.width || !r.height) return false; document.querySelectorAll('[data-sp-copy]').forEach((x) => x.removeAttribute('data-sp-copy')); e.setAttribute('data-sp-copy', '1'); e.scrollIntoView({ block: 'center' }); return true; })()`).catch(() => false);
+				if (inCopy) {
+					await wait(400);
+					await settled(c.page, '[data-sp-copy]');
+					r = await extract(c.page, '[data-sp-copy]', dir, batch.url, { own: false, log });
+					await s.page.eval(`window.__spStatus?.(${JSON.stringify(`Checking ${p.n} at phone width…`)})`).catch(() => {});
+					r.mobile = await phoneIn(c.page, '[data-sp-copy]', dir, vp.w, vp.h).catch(() => null);
+					r.where = 'copy';
+				} else {
+					// only on their page: read it there, keeping the picker out of the pictures
+					await s.page.eval(`window.__spHide?.(true, ${JSON.stringify(sel)})`).catch(() => {});
+					r = await extract(s.page, sel, dir, batch.url, { own: s.own, log }).finally(() => s.page.eval('window.__spHide?.(false)').catch(() => {}));
+					r.mobile = await atPhoneWidth(s, sel, dir, batch.url).catch(() => null);
+					r.where = 'page';
+				}
 				let asset = null;
-			const files = (d.layers ?? []).filter((l) => l.src && /^https?:/.test(l.src) && l.tag !== 'video');
-			if (files.length > 1) {
-				asset = [];
-				for (const [k, l] of files.entries()) { const got = await download(l.src, dir, batch.url, `layer-${k + 1}`); if (got) asset.push({ ...got, layer: l }); }
-				if (!asset.length) asset = null;
-			} else if (d.art?.src && /^https?:/.test(d.art.src) && d.art.kind !== 'video') asset = await download(d.art.src, dir, batch.url);
-			await s.page.eval(`window.__spStatus?.(${JSON.stringify(`Recording how ${p.n} moves…`)})`).catch(() => {});
-			r.motion = await motionRun;
-			const md = pickPrompt({ pick: p, d, r, url: batch.url, asset, dir });
-			writeFileSync(path.join(dir, 'PROMPT.md'), md);
-			out.push({ ...p, dir, md, r, d, asset });
-		} catch (e) {
-			out.push({ ...p, error: String(e.message ?? e) });
+				const files = (d.layers ?? []).filter((l) => l.src && /^https?:/.test(l.src) && l.tag !== 'video');
+				if (files.length > 1) {
+					asset = [];
+					for (const [k, l] of files.entries()) { const got = await download(l.src, dir, batch.url, `layer-${k + 1}`); if (got) asset.push({ ...got, layer: l }); }
+					if (!asset.length) asset = null;
+				} else if (d.art?.src && /^https?:/.test(d.art.src) && d.art.kind !== 'video') asset = await download(d.art.src, dir, batch.url);
+				await s.page.eval(`window.__spStatus?.(${JSON.stringify(`Recording how ${p.n} moves…`)})`).catch(() => {});
+				r.motion = await motionRun;
+				const md = pickPrompt({ pick: p, d, r, url: batch.url, asset, dir });
+				writeFileSync(path.join(dir, 'PROMPT.md'), md);
+				out.push({ ...p, dir, md, r, d, asset, elPath });
+			} catch (e) {
+				await motionRun;
+				out.push({ ...p, error: String(e.message ?? e) });
+			}
+			await s.page.eval(`document.querySelector(${JSON.stringify(sel)})?.removeAttribute('data-sp-pick')`).catch(() => {});
 		}
-		await s.page.eval(`document.querySelector(${JSON.stringify(sel)})?.removeAttribute('data-sp-pick')`).catch(() => {});
+	} finally {
+		copy?.close();
 	}
 	const ok = out.filter((x) => !x.error).length;
-	const done = !ok ? 'Could not read those. Try again.' : batch.action === 'learn' ? `✓ Taken apart, in your agent` : batch.action === 'add' ? `✓ Your agent is adding ${ok === 1 ? 'it' : `all ${ok}`} to your project` : `✓ ${ok} prompt${ok > 1 ? 's' : ''} ready in your agent`;
+	const done = !ok ? 'Could not read those. Try again.' : batch.action === 'learn' ? `Taking it apart…` : batch.action === 'add' ? `✓ Your agent is adding ${ok === 1 ? 'it' : `all ${ok}`} to your project` : `✓ ${ok} prompt${ok > 1 ? 's' : ''} ready in your agent`;
 	await s.page.eval(`window.__spStatus?.(${JSON.stringify(done)})`).catch(() => {});
 	return out;
 }
@@ -350,6 +422,15 @@ export async function devTokens(devUrl) {
 		s.dev = { ...t, opened: true, queue: [], waiter: null };
 	}
 	return s.dev.page.run(tokens).catch(() => null);
+}
+
+/** Break it down on the page itself: the pick lifts off and splits into its layers in 3D, with a labelled panel. */
+export async function showView(elPath, view, title) {
+	if (!session) return false;
+	const data = { ...view, path: elPath, title };
+	await session.page.send('Page.bringToFront').catch(() => {});
+	await session.page.eval(`${LOOK} window.__spView = ${JSON.stringify(data)}; (${viewer.toString()})()`, 60_000);
+	return true;
 }
 
 export { wait };

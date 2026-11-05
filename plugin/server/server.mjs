@@ -159,6 +159,10 @@ Teach it. For each pick: show the exploded view, then walk through the layers bo
 						const b = await breakdown({ dir: x.dir, file: x.r.file, css: x.r.code.css, states: x.r.states, motion: x.r.motion, files, url: batch.url, label: `${x.label.split(' · ')[0]}, ${new URL(batch.url).host.replace(/^www\./, '')}`, note: x.note });
 						const lesson = path.join(x.dir, 'LESSON.md');
 						out.push(text(`── ${x.n}. ${x.label}${x.note ? ` · "${x.note}"` : ''}\nLesson: ${rel(lesson)}  (link: ${link(lesson)}) · exploded view: ${link(path.join(x.dir, 'exploded.png'))} · ${b.layers} layers\n\n${b.md}`));
+						if (x === good[0] && b.view) {
+							const shown = await pick.showView(x.elPath, b.view, `${x.label.split(' · ')[0]}, ${new URL(batch.url).host.replace(/^www\./, '')}`).catch(() => false);
+							if (shown) { await pick.say('✓ Taken apart on the page. Esc puts it back'); out.push(text('It is also taken apart on the page itself, where the person picked it: the layers in 3D with a labelled panel (they can hover a layer, drag to turn it, Esc to put it back). Say so in one line.')); }
+						}
 						out.push(image(b.exploded, 'image/png'));
 						if (existsSync(path.join(x.dir, 'motion.png'))) out.push(image(readFileSync(path.join(x.dir, 'motion.png')), 'image/png'));
 					} catch (e) {

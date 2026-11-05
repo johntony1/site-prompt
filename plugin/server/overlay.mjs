@@ -75,7 +75,7 @@ export function overlay() {
 			return r;
 		};
 		const show = () => {
-			if (!cur || !picking || open) { hl.style.display = chip.style.display = 'none'; return; }
+			if (!cur || !picking || open || window.__spViewerOpen) { hl.style.display = chip.style.display = 'none'; return; }
 			const r = place(hl, cur);
 			chip.innerHTML = picks.some((p) => p.el === cur) ? `Deselect<i>${picks.find((p) => p.el === cur).n}</i>` : describe(cur).label;
 			Object.assign(chip.style, { display: 'flex', left: Math.max(6, Math.min(innerWidth - 200, r.left - 3)) + 'px', top: (r.top > 32 ? r.top - 28 : Math.min(innerHeight - 30, r.bottom + 8)) + 'px' });
@@ -136,15 +136,15 @@ export function overlay() {
 		const closePop = () => { if (open) open.note = note.value.trim(); open = null; pop.style.display = 'none'; };
 		const setPicking = (v) => { picking = v; pickBtn.classList.toggle('on', v); if (!v) { cur = null; show(); } };
 
-		const block = (e) => { if (picking && !ours(e)) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); } };
+		const block = (e) => { if (window.__spViewerOpen) return; if (picking && !ours(e)) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); } };
 		for (const t of ['mousedown', 'mouseup', 'pointerdown', 'pointerup', 'dblclick', 'contextmenu', 'auxclick']) addEventListener(t, block, true);
 		addEventListener('mousemove', (e) => {
-			if (!picking || ours(e) || open) return;
+			if (window.__spViewerOpen || !picking || ours(e) || open) return;
 			const el = target(e.composedPath()[0] instanceof Element ? e.composedPath()[0] : e.target);
 			if (el && el !== cur && el !== document.documentElement && el !== document.body) { cur = el; show(); }
 		}, true);
 		addEventListener('click', (e) => {
-			if (ours(e)) return;
+			if (ours(e) || window.__spViewerOpen) return;
 			if (!picking) return;
 			e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
 			if (open) return closePop();
@@ -162,6 +162,7 @@ export function overlay() {
 			openPop(p);
 		}, true);
 		addEventListener('keydown', (e) => {
+			if (window.__spViewerOpen) return;
 			if (open && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send('send'); return; }
 			if (e.key === 'Escape') { e.preventDefault(); if (open) closePop(); else setPicking(!picking); return; }
 			if (picking && !open && e.key === 'ArrowUp' && cur?.parentElement && cur.parentElement !== document.body) { e.preventDefault(); cur = cur.parentElement; show(); }

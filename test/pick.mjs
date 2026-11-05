@@ -184,6 +184,10 @@ try {
 	check(/BREAK IT DOWN/.test(learn.words) && /# How it is made/.test(learn.words) && /## Build it in steps/.test(learn.words), 'Break it down: a lesson comes back, not a copy prompt', learn.words.split('\n')[0]);
 	check(/2 shadows stacked|one shadow/.test(learn.words) && /inset shadow draws a thin highlight/.test(learn.words), 'it says how the depth is made (shadows, the inner highlight)', learn.words.match(/.*shadow.*/g)?.slice(0, 2));
 	check(learn.images >= 1 && existsSync(path.join(learn.words.match(/Lesson: (\S+)/)[1].replace(/^~/, os.homedir()), '..', 'exploded.png')), 'with the exploded view, saved beside LESSON.md');
+	check(await ev('!!document.querySelector("site-prompt-view")') && /taken apart on the page/i.test(learn.words), 'and it is taken apart on the page itself, in 3D');
+	await hsend('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }, sid);
+	await sleep(1500);
+	check(!(await ev('!!document.querySelector("site-prompt-view")')) && await ev('getComputedStyle(document.querySelector(".cta")).visibility') === 'visible', 'Esc puts it back (the element is visible again)');
 	// 4. building: the toolbar offers Add to my-launch; the agent is told to build it into the project
 	check(await ev(`(() => { const r = window.__spTest.rect('.bar [data-a=add]'); return r.x > 0; })()`), 'the toolbar offers Add to the project');
 	check(await ev(`(() => { const r = window.__spTest.rect('.seg'); return r.x > 0; })()`), 'the toolbar offers Exact | My style');

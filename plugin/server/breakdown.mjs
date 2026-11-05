@@ -77,7 +77,7 @@ function anatomy() {
 		};
 	});
 	const pad = 48;
-	return { nodes: out, size: { w: Math.round(R.width), h: Math.round(R.height) }, clip: { x: Math.floor(lo.x) - pad + scrollX, y: Math.floor(lo.y) - pad + scrollY, width: Math.ceil(lo.r - lo.x) + pad * 2, height: Math.ceil(lo.b - lo.y) + pad * 2 } };
+	return { nodes: out, rootPage: { x: R.left + scrollX, y: R.top + scrollY }, size: { w: Math.round(R.width), h: Math.round(R.height) }, clip: { x: Math.floor(lo.x) - pad + scrollX, y: Math.floor(lo.y) - pad + scrollY, width: Math.ceil(lo.r - lo.x) + pad * 2, height: Math.ceil(lo.b - lo.y) + pad * 2 } };
 }
 
 const fileName = (u) => { try { return decodeURIComponent(new URL(u).pathname.split('/').pop()).replace(/-[0-9a-f]{12,}/i, '').replace(/\.\w+$/, ''); } catch { return ''; } };
@@ -291,7 +291,15 @@ export async function breakdown({ dir, file, css, states, motion = null, files =
 		L.push(`_Taken apart from ${url} to learn from. If you ship something made this way, use your own art, copy and colours._`);
 		const md = L.join('\n');
 		writeFileSync(path.join(dir, 'LESSON.md'), md);
-		return { md, exploded: readFileSync(path.join(dir, 'exploded.png')), layers: info.length, steps: info.length };
+		return {
+			md, exploded: readFileSync(path.join(dir, 'exploded.png')), layers: info.length, steps: info.length,
+			// for the view on the page itself: each layer's picture and where it sits against the element
+			view: {
+				size: a.size, offset: { x: a.clip.x - a.rootPage.x, y: a.clip.y - a.rootPage.y }, clip: { w: a.clip.width, h: a.clip.height },
+				frame: structure.map((n) => howOf({ ...n, paint: [] }, states, motion)).flat().slice(0, 4),
+				layers: info.map((x, k) => ({ n: x.k, name: x.name, how: x.how, png: pics[k].toString('base64') })),
+			},
+		};
 	} finally {
 		close();
 	}
