@@ -106,6 +106,7 @@ export function spKit() {
 			return `${n.alt || fileName(media.v) || n.tag}${f ? ` (${f.file})` : ''}`;
 		}
 		const text = n.paint.find((p) => p.k === 'text');
+		if (text && n.paint.some((p) => /^(fill|shadow|gradient|border)$/.test(p.k)) && n.box.w >= 60 && n.box.h >= 40) return `Card "${text.v.slice(0, 32)}"`;
 		if (text) return `Text "${text.v.slice(0, 40)}"`;
 		const pp = Object.entries(n.pseudos).filter(([, v]) => v.paint.length);
 		const all = [...n.paint, ...pp.flatMap(([, v]) => v.paint)];

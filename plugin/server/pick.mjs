@@ -469,4 +469,24 @@ export async function updateView(patch) {
 	return true;
 }
 
+export const SIZES = [{ id: 'phone', name: 'Phone', w: 390, h: 844 }, { id: 'tablet', name: 'Tablet', w: 834, h: 1112 }, { id: 'laptop', name: 'Laptop', w: 1440, h: 900 }, { id: 'big', name: 'Big screen', w: 1920, h: 1080 }];
+
+/** The pick taken apart at each screen size (in a Chrome of its own), sent into the open view as each is ready. */
+export async function viewsAtSizes(url, elPath, title, { log = () => {} } = {}) {
+	if (!session || !elPath) return;
+	const { page, close } = await launch({ width: 1440, height: 900 });
+	try {
+		await goto(page, url, { settle: 3000 });
+		await page.eval(`${LOOK} ${KIT}`);
+		for (const z of SIZES) {
+			await viewport(page, z.w, z.h);
+			await wait(700);
+			const data = await page.eval(`(async () => { const e = document.querySelector(${JSON.stringify(elPath)}); if (!e) return null; const r = e.getBoundingClientRect(); if (r.width < 2 || r.height < 2) return { hidden: true }; e.scrollIntoView({ block: 'center' }); await new Promise((res) => setTimeout(res, 250)); return window.__spInstant(e, ${JSON.stringify(title)}, null, false); })()`, 60_000).catch(() => null);
+			await updateView({ size: { ...z, data: data ?? { missing: true } } }).catch(() => {});
+		}
+	} finally {
+		close();
+	}
+}
+
 export { wait };

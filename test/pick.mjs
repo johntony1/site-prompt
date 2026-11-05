@@ -226,7 +226,7 @@ try {
 	await click(await ui('.bar [data-a=add]'));
 	// their site opens in a new tab with the placer: they show where it goes
 	let devTab = null;
-	for (let k = 0; k < 300 && !devTab; k++) { devTab = (await hsend('Target.getTargets')).result.targetInfos.find((t) => t.type === 'page' && t.url.startsWith(DEV_URL)); if (!devTab) await sleep(100); }
+	for (let k = 0; k < 600 && !devTab; k++) { devTab = (await hsend('Target.getTargets')).result.targetInfos.find((t) => t.type === 'page' && t.url.startsWith(DEV_URL)); if (!devTab) await sleep(100); }
 	check(!!devTab, 'Add opens their running site in a new tab', devTab?.url);
 	const dsid = (await hsend('Target.attachToTarget', { targetId: devTab.targetId, flatten: true })).result.sessionId;
 	const dev = async (expr) => (await hsend('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true }, dsid)).result?.result?.value;

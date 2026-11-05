@@ -16,6 +16,10 @@ export function viewer() {
 	const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 	const n = V.layers.length;
 	const pad2 = (k) => String(k).padStart(2, '0');
+	const SIZES = [{ id: 'phone', name: 'Phone', w: 390 }, { id: 'tablet', name: 'Tablet', w: 834 }, { id: 'laptop', name: 'Laptop', w: 1440 }, { id: 'big', name: 'Big screen', w: 1920 }];
+	V.sizes ??= {};
+	// what is on screen now is the size nearest the person's own window
+	const mine = V.mineSize ?? SIZES.reduce((a, z) => (Math.abs(z.w - (V.width ?? innerWidth)) < Math.abs(a.w - (V.width ?? innerWidth)) ? z : a)).id;
 	// slabs in the pick's own colour: dark sites get dark slabs, light ones light
 	function slabVars(bg) {
 		const m = String(bg ?? '').match(/\d+(\.\d+)?/g)?.map(Number);
@@ -110,18 +114,27 @@ export function viewer() {
 		.b.p:hover:after{opacity:1}
 		.b.done{color:#4cb782}
 		.b.p.done{color:#fff}
+		.sizes{position:fixed;left:50%;top:22px;transform:translateX(-50%);display:flex;gap:2px;padding:3px;border-radius:11px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0) 40%),var(--panel);box-shadow:0 0 0 1px var(--line),0 0 0 1px rgba(0,0,0,.55),0 16px 32px -12px rgba(0,0,0,.6);opacity:0;transition:opacity .4s ease .5s}
+		.on .sizes{opacity:1}
+		.sz{appearance:none;border:0;height:30px;padding:0 12px;border-radius:8px;display:flex;align-items:center;gap:7px;background:transparent;color:var(--muted);font-size:12.5px;font-weight:550;cursor:pointer;transition:background .12s ease,color .12s ease}
+		.sz i{font-style:normal;font:500 10.5px/1 var(--mono);color:var(--faint)}
+		.sz:hover{color:var(--ink2)}
+		.sz.on{background:rgba(255,255,255,.09);color:var(--ink);box-shadow:0 0 0 1px var(--line2),0 1px 2px rgba(0,0,0,.4)}
+		.sz.on i{color:var(--muted)}
+		.sz.wait{opacity:.45;cursor:progress}
+		.sz.wait i:after{content:' …'}
+		.sz.none{opacity:.35;cursor:not-allowed}
 		.bar{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;padding:6px;border-radius:13px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0) 40%),var(--panel);box-shadow:0 0 0 1px var(--line),0 0 0 1px rgba(0,0,0,.55),0 24px 48px -12px rgba(0,0,0,.6);opacity:0;transition:opacity .4s ease .55s}
 		.on .bar{opacity:1}
-		.bar label{display:flex;align-items:center;gap:8px;padding:0 8px 0 10px;font-size:12px;color:var(--muted)}
-		.bar input{-webkit-appearance:none;appearance:none;width:116px;height:18px;background:transparent;cursor:pointer;--v:60%}
-		.bar input::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(90deg,var(--blue2) var(--v),rgba(255,255,255,.12) var(--v));box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
-		.bar input::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;background:#f7f8f8;box-shadow:0 0 0 1px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.45);transition:transform .12s ease}
-		.bar input:hover::-webkit-slider-thumb{transform:scale(1.12)}
-		.bar input:focus-visible{outline:none}
-		.bar input:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 3px rgba(61,123,255,.45),0 2px 6px rgba(0,0,0,.45)}
-		.bar input::-moz-range-track{height:4px;border-radius:2px;background:rgba(255,255,255,.12)}
-		.bar input::-moz-range-progress{height:4px;border-radius:2px;background:var(--blue2)}
-		.bar input::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:#f7f8f8}
+		.sld{position:relative;width:236px;height:32px;border-radius:9px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px var(--line);cursor:ew-resize;touch-action:none;outline:none;user-select:none}
+		.sld:focus-visible{box-shadow:inset 0 0 0 1px var(--line),0 0 0 2px rgba(61,123,255,.5)}
+		.sld .fill{position:absolute;left:0;top:0;bottom:0;min-width:76px;border-radius:9px;background:linear-gradient(180deg,rgba(61,123,255,.34),rgba(43,100,248,.26));box-shadow:inset 0 0 0 1px rgba(61,123,255,.38),inset 0 1px 0 rgba(255,255,255,.08);display:flex;align-items:center}
+		.sld .fill span{padding-left:12px;font-size:12.5px;font-weight:550;color:var(--ink2)}
+		.sld .fill b{position:absolute;right:7px;top:50%;width:5px;height:18px;margin-top:-9px;border-radius:3px;background:#f7f8f8;box-shadow:0 0 0 1px rgba(0,0,0,.25),0 2px 4px rgba(0,0,0,.4);transition:transform .12s ease}
+		.sld:hover .fill b,.sld.drag .fill b{transform:scaleY(1.12)}
+		.sld .dots{position:absolute;left:84px;right:52px;top:50%;height:2px;margin-top:-1px;display:flex;justify-content:space-between;pointer-events:none}
+		.sld .dots i{width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.18);margin-top:-.5px}
+		.sld em{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-style:normal;font:500 12px/1 var(--mono);color:var(--muted);pointer-events:none}
 		.bar .sep{width:1px;height:18px;background:var(--line);margin:0 2px}
 		.views{display:flex;padding:2px;gap:1px;border-radius:8px;background:rgba(255,255,255,.035);box-shadow:inset 0 0 0 1px var(--line)}
 		.vb{appearance:none;border:0;width:30px;height:26px;border-radius:6px;display:grid;place-items:center;color:var(--muted);background:transparent;cursor:pointer;transition:background .12s ease,color .12s ease}
@@ -138,10 +151,11 @@ export function viewer() {
 		<div class="canvas"></div>
 		<div class="stage"><div class="stack">${V.layers.map((l, k) => `<div class="plane" data-k="${k}"><div class="edge"></div><div class="slab"><i class="q"></i><i class="q"></i><i class="q"></i><i class="q"></i></div>${V.html ? `<div class="copy p${k}">${V.html}</div>` : l.png ? `<img src="data:image/png;base64,${l.png}">` : ''}<span class="tag">${pad2(l.n)}</span><i class="pin l"></i><i class="pin r"></i></div>`).join('')}</div></div>
 		<svg class="lines"><path class="lab" d=""/><circle class="lab" r="3" cx="-9" cy="-9"/><path class="card" d=""/><circle class="card" r="3" cx="-9" cy="-9"/></svg>
+		<div class="sizes">${SIZES.map((z) => `<button class="sz" data-z="${z.id}" title="${z.w} × ${z.h}"><span>${z.name}</span><i>${z.w}</i></button>`).join('')}</div>
 		<div class="head"><small>Breakdown</small><h2>${esc(V.title)}</h2><p>${n} layers · hover one to inspect · drag to turn</p><div class="was"><span>You picked</span><div class="thumb"><div class="tin">${V.html ? `<div class="whole">${V.html}</div>` : V.layers.map((l) => (l.png ? `<img src="data:image/png;base64,${l.png}">` : '')).join('')}</div></div></div></div>
 		<div class="labels">${V.layers.slice().reverse().map((l) => `<div class="label" data-k="${l.n - 1}"><b>${pad2(l.n)}</b>${esc(l.name.replace(/ \(layer-\d+\.\w+\)/, ''))}</div>`).join('')}</div>
 		<div class="spec"></div>
-		<div class="bar"><div class="views"><button class="vb on" data-v="top" title="From above"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 2.5l5.5 3L8 8.5l-5.5-3L8 2.5z"/><path d="M2.5 8.5L8 11.5l5.5-3"/><path d="M2.5 11L8 14l5.5-3" opacity=".55"/></svg></button><button class="vb" data-v="front" title="Facing you"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="2" y="3.5" width="7" height="9" rx="1.2"/><path d="M11 4.5v7M13.5 5.5v5" opacity=".75"/></svg></button></div><span class="sep"></span><label>Spread <input type="range" min="0" max="100" value="60"></label><button class="b" data-a="flat">Flatten</button><span class="sep"></span><button class="b p" data-a="all">Copy whole thing</button><button class="b" data-a="close">Close <kbd>esc</kbd></button></div>
+		<div class="bar"><div class="views"><button class="vb on" data-v="top" title="From above"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 2.5l5.5 3L8 8.5l-5.5-3L8 2.5z"/><path d="M2.5 8.5L8 11.5l5.5-3"/><path d="M2.5 11L8 14l5.5-3" opacity=".55"/></svg></button><button class="vb" data-v="front" title="Facing you"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="2" y="3.5" width="7" height="9" rx="1.2"/><path d="M11 4.5v7M13.5 5.5v5" opacity=".75"/></svg></button></div><span class="sep"></span><div class="sld" role="slider" tabindex="0" aria-label="Spread" aria-valuemin="0" aria-valuemax="100"><div class="fill"><span>Spread</span><b></b></div><div class="dots"><i></i><i></i><i></i><i></i><i></i><i></i></div><em></em></div><button class="b" data-a="flat">Flatten</button><span class="sep"></span><button class="b p" data-a="all">Copy whole thing</button><button class="b" data-a="close">Close <kbd>esc</kbd></button></div>
 	</div>`;
 	document.documentElement.appendChild(host);
 	const $ = (s) => root.querySelector(s);
@@ -174,13 +188,14 @@ export function viewer() {
 	const el = V.el ?? (V.path && document.querySelector(V.path));
 	let r = el?.getBoundingClientRect();
 	if (!r || !r.width || r.bottom < 0 || r.top > innerHeight) { el?.scrollIntoView({ block: 'center' }); r = el?.getBoundingClientRect() ?? { left: (innerWidth - V.size.w) / 2, top: (innerHeight - V.size.h) / 2, width: V.size.w, height: V.size.h }; }
-	const was = el ? el.style.visibility : '';
+	const was = V.was ?? (el ? el.style.visibility : '');
 	if (el) el.style.visibility = 'hidden';
+	if (V.again) r = { left: (innerWidth - V.size.w) / 2, top: (innerHeight - V.size.h) / 2, width: V.size.w, height: V.size.h };
 	Object.assign(stage.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
 	Object.assign(stack.style, { left: V.offset.x + 'px', top: V.offset.y + 'px', width: V.clip.w + 'px', height: V.clip.h + 'px' });
 	let hot = null;
 	const ANGLES_START = { ry: 0, rx: 55, rz: -40 };
-	let ry = 0, rx = 0, rz = 0, spread = 0.6, flat = false, tx = 0, ty = 0, sc = 1;
+	let ry = 0, rx = 0, rz = 0, spread = V.spread ?? 0.6, flat = false, tx = 0, ty = 0, sc = 1;
 	const gap = () => (flat ? 0 : spread * 1.6 * Math.max(40, Math.min(170, Math.max(V.clip.w, V.clip.h) * 0.16)));
 	const apply = () => {
 		stack.style.transform = `translate(${tx}px, ${ty}px) scale(${sc}) rotateY(${flat ? 0 : ry}deg) rotateX(${flat ? 0 : rx}deg) rotateZ(${flat ? 0 : rz}deg)`;
@@ -215,11 +230,10 @@ export function viewer() {
 		// lift off: flat over the element, then turn and split. Where it ends up is measured first, with transitions off.
 		const all = [stack, ...planes];
 		all.forEach((e) => (e.style.transition = 'none'));
-		({ ry, rx, rz } = ANGLES_START);
+		({ ry, rx, rz } = V.angle ?? ANGLES_START);
 		apply(); refit(); refit();
 		const target = { ry, rx, rz, tx, ty, sc };
-		ry = 0; rx = 0; rz = 0; tx = 0; ty = 0; sc = 1; flat = true;
-		apply();
+		if (!V.again) { ry = 0; rx = 0; rz = 0; tx = 0; ty = 0; sc = 1; flat = true; apply(); }
 		stack.getBoundingClientRect();
 		all.forEach((e) => (e.style.transition = ''));
 		planes.forEach((p, k) => (p.style.transitionDelay = `${k * 40}ms`));
@@ -345,6 +359,7 @@ export function viewer() {
 	});
 	const ANGLES = { top: { ry: 0, rx: 55, rz: -40 }, front: { ry: -38, rx: 8, rz: 0 } };
 	const views = [...root.querySelectorAll('.vb')];
+	if (V.view) views.forEach((b) => b.classList.toggle('on', b.dataset.v === V.view));
 	const setView = (name) => {
 		views.forEach((b) => b.classList.toggle('on', b.dataset.v === name));
 		const was = { tx, ty, sc };
@@ -361,17 +376,54 @@ export function viewer() {
 		requestAnimationFrame(() => { ({ tx, ty, sc } = to); apply(); });
 	};
 	views.forEach((b) => b.addEventListener('click', () => setView(b.dataset.v)));
-	const range = $('input[type=range]');
-	range.addEventListener('input', () => { spread = range.value / 100; range.style.setProperty('--v', range.value + '%'); flat = false; apply(); });
+	// the spread slider: drag anywhere along it, arrows step it
+	const sld = $('.sld'), sfill = sld.querySelector('.fill'), sval = sld.querySelector('em');
+	const showSpread = () => {
+		const w = sld.clientWidth || 236, min = 76;
+		sfill.style.width = Math.round(min + (w - min) * spread) + 'px';
+		sval.textContent = (0.2 + spread * 2.3).toFixed(1) + '×';
+		sld.setAttribute('aria-valuenow', String(Math.round(spread * 100)));
+		sld.querySelectorAll('.dots i').forEach((d) => { const x = d.getBoundingClientRect().left - sld.getBoundingClientRect().left; d.style.opacity = x < sfill.offsetWidth - 4 ? '0' : '1'; });
+	};
+	const setSpread = (v) => { spread = Math.max(0, Math.min(1, v)); flat = false; flatBtn.textContent = 'Flatten'; showSpread(); apply(); };
+	const fromX = (x) => { const b = sld.getBoundingClientRect(), min = 76; return (x - b.left - min / 2) / (b.width - min); };
+	sld.addEventListener('pointerdown', (e) => { sld.setPointerCapture(e.pointerId); sld.classList.add('drag'); setSpread(fromX(e.clientX)); });
+	sld.addEventListener('pointermove', (e) => { if (sld.classList.contains('drag')) setSpread(fromX(e.clientX)); });
+	sld.addEventListener('pointerup', () => sld.classList.remove('drag'));
+	sld.addEventListener('keydown', (e) => { if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); setSpread(spread + 0.05); } if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { e.preventDefault(); setSpread(spread - 0.05); } });
+	requestAnimationFrame(showSpread);
 	const flatBtn = $('[data-a=flat]');
 	flatBtn.addEventListener('click', () => { flat = !flat; flatBtn.textContent = flat ? 'Spread out' : 'Flatten'; apply(); });
 	$('[data-a=all]').addEventListener('click', (e) => { const t = V.all || V.layers.map((l) => l.prompt).filter(Boolean).join('\n\n---\n\n'); if (t) copy(t, e.currentTarget, 'Copy whole thing'); else { e.currentTarget.textContent = 'Writing prompt…'; setTimeout(() => (e.currentTarget.textContent = 'Copy whole thing'), 1400); } });
 	const loop = () => { if (!host.isConnected) return; lines(); requestAnimationFrame(loop); };
 	requestAnimationFrame(loop);
 	// when the motion arrives: new card rows and prompts, in place
+	// sizes: ready ones can be shown; the one on screen is lit
+	const szBtns = [...root.querySelectorAll('.sz')];
+	const paintSizes = () => szBtns.forEach((b) => {
+		const id = b.dataset.z, d = id === mine ? 'mine' : V.sizes[id];
+		b.classList.toggle('on', id === (V.sizeId ?? mine));
+		b.classList.toggle('wait', !d);
+		b.classList.toggle('none', !!d && d !== 'mine' && (d.missing || d.hidden));
+		b.title = d?.hidden ? 'Hidden at this size' : d?.missing ? 'Not found at this size' : !d ? 'Laying it out at this size…' : '';
+	});
+	paintSizes();
+	szBtns.forEach((b) => b.addEventListener('click', () => {
+		const id = b.dataset.z;
+		if (id === (V.sizeId ?? mine)) return;
+		const d = id === mine ? V.sizes.__mine : V.sizes[id];
+		if (!d || d.missing || d.hidden) return;
+		const base = V.sizes.__mine ?? V;
+		window.__spView = { ...d, el, title: base.title, all: base.all, mirror: id === mine ? base.mirror : null, sizes: V.sizes, sizeId: id, mineSize: mine, width: V.width, was, again: true, spread, angle: { ry, rx, rz }, view: root.querySelector('.vb.on')?.dataset.v };
+		window.__spViewer();
+	}));
+	V.sizes.__mine ??= { ...V };
 	window.__spViewUpdate = (patch) => {
+		if (patch.size) { V.sizes[patch.size.id] = patch.size.data; paintSizes(); }
 		if (patch.all) V.all = patch.all;
-		(patch.layers ?? []).forEach((p, k) => { if (V.layers[k]) Object.assign(V.layers[k], p); });
+		const target = V.sizeId && V.sizeId !== mine ? V.sizes.__mine?.layers ?? [] : V.layers;
+		(patch.layers ?? []).forEach((p, k) => { if (target[k]) Object.assign(target[k], p); });
+		if (patch.all && V.sizes.__mine) V.sizes.__mine.all = patch.all;
 		if (hot != null) showCard(hot);
 	};
 	// put it back: the layers fall back into the page, then the view goes
@@ -395,7 +447,7 @@ export function viewer() {
  * In the page, the moment Break it down is pressed: the pick exactly as it is on screen now (read-only), grouped into
  * layers, and the view opened on it. Returns what the server needs to build the lesson from the same picture.
  */
-export async function instant(el, title, area = null) {
+export async function instant(el, title, area = null, show = true) {
 	const K = window.__spKit;
 	if (!K || !window.__spSnap || !el) return null;
 	el.setAttribute('data-sp-picked', '1');
@@ -586,6 +638,9 @@ export async function instant(el, title, area = null) {
 	// the view mirrors the moving parts from the page every frame (the page keeps animating underneath)
 	const mirror = [...moving].map((i) => ({ i, el: live.get(i) })).filter((m) => m.el);
 	const V = { el, title, area, mirror, html: snap.html, rules: snap.rules, bg, size: { w: r.width, h: r.height }, offset: { x: 0, y: 0 }, clip: { w: r.width, h: r.height }, layers };
+	// at another width (the server lays it out there): the view's data only, nothing shown
+	if (!show) return { title, html: snap.html, rules: snap.rules, bg, size: V.size, offset: V.offset, clip: V.clip, layers, width: innerWidth };
+	V.width = innerWidth;
 	window.__spView = V;
 	window.__spViewer();
 	return { html: snap.html, rules: snap.rules, fonts: [...new Set(fonts)], bg, size: V.size, why, layers: layers.map(({ specs, type, layout, holds, why: w, design, eng, authored, ...l }) => ({ ...l, authored })) };

@@ -163,6 +163,8 @@ Teach it. For each pick: show the exploded view, then walk through the layers bo
 						const onView = !inst && x === good[0] ? async (view) => { shown = await pick.showView(x.elPath, view, title, x.md).catch(() => false); if (shown) await pick.say('Taken apart. Hover a layer, Esc puts it back'); } : null;
 						const b = await breakdown({ dir: x.dir, file: x.r.file, css: x.r.code.css, states: x.r.states, motion: x.finish ? undefined : x.r.motion, files, url: batch.url, label: title, note: x.note, onView, given: inst?.layers });
 						if (inst) { await pick.updateView({ all: x.md, layers: viewOf(b.ctx, undefined, null).layers }).catch(() => {}); await pick.say('Taken apart. Hover a layer, Esc puts it back'); }
+						// the other screen sizes, laid out in the background while they look
+						const sizesRun = shown && x === good[0] ? pick.viewsAtSizes(batch.url, x.elPath, title).catch(() => {}) : null;
 						const motion = x.finish ? await x.finish().catch(() => null) : x.r.motion;
 						if (x.finish) {
 							// the motion is in: the cards, the prompts and the lesson get it
@@ -170,6 +172,7 @@ Teach it. For each pick: show the exploded view, then walk through the layers bo
 							b.md = lessonOf(b.ctx, motion, x.note);
 							if (shown) await pick.updateView({ all: x.md, layers: viewOf(b.ctx, motion, null).layers }).catch(() => {});
 						}
+						await sizesRun;
 						const lesson = path.join(x.dir, 'LESSON.md');
 						if (shown) out.push(text('It is also taken apart on the page itself, where the person picked it: white layers in 3D with a spec card per layer (fills, corners, shadows, tilt, motion) and Copy prompt for any single layer or the whole thing; hover a layer, drag to turn, Esc puts it back. Say so in one line.'));
 						out.push(text(`── ${x.n}. ${x.label}${x.note ? ` · "${x.note}"` : ''}\nLesson: ${rel(lesson)}  (link: ${link(lesson)}) · exploded view: ${link(path.join(x.dir, 'exploded.png'))} · ${b.layers} layers\n\n${b.md}`));
