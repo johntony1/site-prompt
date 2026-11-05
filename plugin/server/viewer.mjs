@@ -114,6 +114,8 @@ export function viewer() {
 		.b.p:hover:after{opacity:1}
 		.b.done{color:#4cb782}
 		.b.p.done{color:#fff}
+		.backing{position:absolute;inset:-12px;border-radius:12px;transform:translateZ(-3px);opacity:0;transition:opacity .4s ease;box-shadow:0 0 0 1px rgba(255,255,255,.06),0 30px 60px -30px rgba(0,0,0,.7)}
+		.v.specs.on .backing{opacity:1}
 		.v.specs .plane .slab,.v.specs .plane .edge,.v.specs .plane .tag{opacity:0!important}
 		.v.specs .plane.hot .slab{opacity:1!important;background:transparent!important;box-shadow:0 0 0 1.5px var(--blue2),0 0 0 6px rgba(61,123,255,.16)!important}
 		.v.specs .labels{display:none}
@@ -173,7 +175,7 @@ export function viewer() {
 	</style>
 	<div class="v" style="${slabVars(V.bg)}">
 		<div class="canvas"></div>
-		<div class="stage"><div class="stack">${V.layers.map((l, k) => `<div class="plane" data-k="${k}"><div class="edge"></div><div class="slab"><i class="q"></i><i class="q"></i><i class="q"></i><i class="q"></i></div>${V.html ? `<div class="copy p${k}" style="left:${-(V.offset?.x || 0)}px;top:${-(V.offset?.y || 0)}px">${V.html}</div>` : l.png ? `<img src="data:image/png;base64,${l.png}">` : ''}<span class="tag">${pad2(l.n)}</span><i class="pin l"></i><i class="pin r"></i></div>`).join('')}</div></div>
+		<div class="stage"><div class="stack"><div class="backing" style="background:${esc(V.bg || 'transparent')}"></div>${V.layers.map((l, k) => `<div class="plane" data-k="${k}"><div class="edge"></div><div class="slab"><i class="q"></i><i class="q"></i><i class="q"></i><i class="q"></i></div>${V.html ? `<div class="copy p${k}" style="left:${-(V.offset?.x || 0)}px;top:${-(V.offset?.y || 0)}px">${V.html}</div>` : l.png ? `<img src="data:image/png;base64,${l.png}">` : ''}<span class="tag">${pad2(l.n)}</span><i class="pin l"></i><i class="pin r"></i></div>`).join('')}</div></div>
 		<svg class="callines"></svg><div class="callouts"></div><svg class="lines"><path class="lab" d=""/><circle class="lab" r="3" cx="-9" cy="-9"/><path class="card" d=""/><circle class="card" r="3" cx="-9" cy="-9"/></svg>
 		<div class="sizes">${SIZES.map((z) => `<button class="sz" data-z="${z.id}" title="${z.w} × ${z.h}"><span>${z.name}</span><i>${z.w}</i></button>`).join('')}</div>
 		<div class="head"><small>Breakdown</small><h2>${esc(V.title)}</h2><p>${n} layers · hover one to inspect · scroll to zoom · drag to move</p><div class="was"><span>You picked</span><div class="thumb"><div class="tin">${V.html ? `<div class="whole" style="position:absolute;left:${-(V.offset?.x || 0)}px;top:${-(V.offset?.y || 0)}px">${V.html}</div>` : V.layers.map((l) => (l.png ? `<img src="data:image/png;base64,${l.png}">` : '')).join('')}</div></div></div></div>
