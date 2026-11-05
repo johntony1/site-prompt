@@ -35,7 +35,7 @@ function howOf(n, states, motion = null) {
 			if (p.k === 'gradient') L.push(`${where}a gradient fill: ${p.v.slice(0, 140)}`);
 			if (p.k === 'fill') L.push(`${where}a solid fill, ${p.v}`);
 			if (p.k === 'border') L.push(`${where}a border, ${p.v}`);
-			if (p.k === 'media') L.push(/\.svg(\?|$)/i.test(p.v) || p.v === 'svg' ? `${where}a vector drawing (SVG), sharp at any size` : `${where}an image file`);
+			if (p.k === 'media') L.push(/\.svg(\?|$)/i.test(p.v) || p.v === 'svg' ? `${where}a vector drawing (SVG), sharp at any size` : p.v === 'canvas' ? `${where}a <canvas> a script draws on every frame (live motion, no image file)` : p.v === 'video' ? `${where}a video` : `${where}an image file`);
 		}
 		if (fx.perspective) L.push(`${where}sets up 3D space (perspective ${fx.perspective}) for what is inside it`);
 		if (fx.mask) L.push(`${where}${/rgba\(0,\s*0,\s*0,\s*0\)/.test(fx.mask) && /linear-gradient/.test(fx.mask) ? 'fades out at the edge with a gradient mask' : 'is cut to a shape by a mask'}: ${fx.mask.slice(0, 120)}`);
