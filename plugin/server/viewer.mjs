@@ -45,9 +45,7 @@ export function viewer() {
 		.on .plane .tag{opacity:1}
 		.pin{position:absolute;width:1px;height:1px}
 		.pin.l{left:0;top:50%}.pin.r{right:0;top:50%}
-		.focus .plane{opacity:.28}
-		.focus .plane.hot{opacity:1}
-		.plane.hot .slab{box-shadow:0 0 0 1.5px var(--blue2),0 0 0 6px rgba(61,123,255,.12)}
+				.plane.hot .slab{box-shadow:0 0 0 1.5px var(--blue2),0 0 0 6px rgba(61,123,255,.12)}
 		.plane.hot .edge{background:#9db8fb;box-shadow:0 0 0 1.5px var(--blue2),0 26px 40px -24px rgba(43,100,248,.35)}
 		.plane.hot .tag{background:var(--blue);color:#fff;box-shadow:none}
 		.head{position:fixed;left:32px;top:28px;opacity:0;transform:translateY(-6px);transition:opacity .4s ease .25s,transform .5s cubic-bezier(.2,.8,.2,1) .25s}
@@ -55,6 +53,12 @@ export function viewer() {
 		.head small{font:500 10.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
 		.head h2{font-size:19px;font-weight:620;color:var(--ink);letter-spacing:-.015em;margin-top:8px}
 		.head p{font-size:12.5px;color:var(--muted);margin-top:4px}
+		.was{margin-top:16px}
+		.was span{display:block;font:500 10.5px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+		.thumb{position:relative;width:220px;border-radius:10px;overflow:hidden;background:var(--slab,#fff);box-shadow:0 0 0 1px var(--line2),0 12px 30px -12px rgba(0,0,0,.6)}
+		.tin{position:absolute;left:0;top:0;transform-origin:0 0}
+		.tin img{position:absolute;left:0;top:0}
+		.tin .whole *,.tin .whole *::before,.tin .whole *::after{transition:none!important;animation:none!important}
 		.labels{position:fixed;left:32px;display:flex;flex-direction:column;gap:2px;opacity:0;transition:opacity .4s ease .45s}
 		.on .labels{opacity:1}
 		.label{display:flex;align-items:center;gap:10px;height:30px;padding-right:10px;cursor:default;font:500 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--faint);white-space:nowrap;transition:color .15s ease}
@@ -111,7 +115,7 @@ export function viewer() {
 		<div class="canvas"></div>
 		<div class="stage"><div class="stack">${V.layers.map((l, k) => `<div class="plane" data-k="${k}"><div class="edge"></div><div class="slab"></div>${V.html ? `<div class="copy p${k}">${V.html}</div>` : l.png ? `<img src="data:image/png;base64,${l.png}">` : ''}<span class="tag">${pad2(l.n)}</span><i class="pin l"></i><i class="pin r"></i></div>`).join('')}</div></div>
 		<svg class="lines"><path class="lab" d=""/><circle class="lab" r="3" cx="-9" cy="-9"/><path class="card" d=""/><circle class="card" r="3" cx="-9" cy="-9"/></svg>
-		<div class="head"><small>Breakdown</small><h2>${esc(V.title)}</h2><p>${n} layers · hover one to inspect · drag to turn</p></div>
+		<div class="head"><small>Breakdown</small><h2>${esc(V.title)}</h2><p>${n} layers · hover one to inspect · drag to turn</p><div class="was"><span>You picked</span><div class="thumb"><div class="tin">${V.html ? `<div class="whole">${V.html}</div>` : V.layers.map((l) => (l.png ? `<img src="data:image/png;base64,${l.png}">` : '')).join('')}</div></div></div></div>
 		<div class="labels">${V.layers.slice().reverse().map((l) => `<div class="label" data-k="${l.n - 1}"><b>${pad2(l.n)}</b>${esc(l.name.replace(/ \(layer-\d+\.\w+\)/, ''))}</div>`).join('')}</div>
 		<div class="spec"></div>
 		<div class="bar"><label>Spread <input type="range" min="0" max="100" value="60"></label><button class="b" data-a="flat">Flatten</button><span class="sep"></span><button class="b p" data-a="all">Copy whole thing</button><button class="b" data-a="close">Close <kbd>esc</kbd></button></div>
@@ -151,14 +155,15 @@ export function viewer() {
 	if (el) el.style.visibility = 'hidden';
 	Object.assign(stage.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
 	Object.assign(stack.style, { left: V.offset.x + 'px', top: V.offset.y + 'px', width: V.clip.w + 'px', height: V.clip.h + 'px' });
+	let hot = null;
 	let rx = 0, rz = 0, spread = 0.6, flat = false, tx = 0, ty = 0, sc = 1;
-	const gap = () => (flat ? 0 : spread * Math.max(56, Math.min(130, 700 / Math.max(1, n))));
+	const gap = () => (flat ? 0 : spread * 1.6 * Math.max(40, Math.min(170, Math.max(V.clip.w, V.clip.h) * 0.16)));
 	const apply = () => {
 		stack.style.transform = `translate(${tx}px, ${ty}px) scale(${sc}) rotateX(${flat ? 0 : rx}deg) rotateZ(${flat ? 0 : rz}deg)`;
-		planes.forEach((p, k) => { p.style.transform = `translateZ(${k * gap()}px)`; });
+		planes.forEach((p, k) => { p.style.transform = `translateZ(${k * gap() + (k === hot && !flat ? gap() * 0.35 : 0)}px)`; });
 	};
 	// the free space: between the labels on the left and the card on the right
-	const space = () => ({ l: 260, r: innerWidth - 390, t: 110, b: innerHeight - 90 });
+	const space = () => ({ l: 290, r: innerWidth - 390, t: 70, b: innerHeight - 90 });
 	const refit = () => {
 		let u = null;
 		for (const p of planes) for (const q of [p.querySelector('.slab').getBoundingClientRect(), p.querySelector('.edge').getBoundingClientRect(), p.querySelector('.tag').getBoundingClientRect()]) u = u ? { l: Math.min(u.l, q.left), t: Math.min(u.t, q.top), r: Math.max(u.r, q.right), b: Math.max(u.b, q.bottom) } : { l: q.left, t: q.top, r: q.right, b: q.bottom };
@@ -202,9 +207,16 @@ export function viewer() {
 			setTimeout(() => { planes.forEach((p) => (p.style.transitionDelay = '')); setHot(n - 1); }, 1000 + n * 40);
 		}));
 	});
+	// the preview: the whole pick, scaled into 220 px
+	{
+		const thumb = $('.thumb'), tin = $('.tin'), W = V.html ? V.size.w : V.clip.w, H = V.html ? V.size.h : V.clip.h, k = Math.min(220 / W, 150 / H);
+		Object.assign(thumb.style, { width: Math.round(W * k) + 'px', height: Math.round(H * k) + 'px' });
+		Object.assign(tin.style, { width: W + 'px', height: H + 'px', transform: `scale(${k})` });
+		tin.querySelectorAll('img').forEach((im) => Object.assign(im.style, { width: W + 'px', height: H + 'px' }));
+	}
 	// the labels: a column on the left, centred
 	const h0 = labelsBox.getBoundingClientRect().height;
-	labelsBox.style.top = Math.max(130, (innerHeight - h0) / 2) + 'px';
+	labelsBox.style.top = Math.max($('.head').getBoundingClientRect().bottom + 28, (innerHeight - h0) / 2) + 'px';
 	// the card: what the layer is made of, and its prompt
 	const swatch = (row) => (row.sw ? `<s class="${/gradient/.test(row.sw) ? 'g' : ''}" style="background:${esc(row.sw)}"></s>` : '');
 	const copy = async (text, btn, label) => {
@@ -216,7 +228,6 @@ export function viewer() {
 		setTimeout(() => { btn.textContent = label; btn.classList.remove('done'); }, 1600);
 		window.__spCopied = text;
 	};
-	let hot = null;
 	const showCard = (k) => {
 		const l = V.layers[k];
 		card.innerHTML = `<div class="ch"><i>${pad2(l.n)}</i><b>${esc(l.name)}</b></div>
@@ -242,6 +253,7 @@ export function viewer() {
 		hot = k;
 		v.classList.add('focus');
 		planes.forEach((p, j) => p.classList.toggle('hot', j === k));
+		apply();
 		labels.forEach((x) => x.classList.toggle('hot', +x.dataset.k === k));
 		showCard(k);
 		// the card follows the layer up and down
