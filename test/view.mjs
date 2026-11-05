@@ -24,6 +24,19 @@ for (let k = 0; k < 4; k++) { ys.push(await page.eval(`(() => { const e = [...do
 check(ys.every((y) => y != null) && new Set(ys.map((y) => Math.round(y))).size >= 3, 'a script-driven animation (requestAnimationFrame) is mirrored live too', ys.map((y) => Math.round(y)));
 const sc = scales.map((m) => parseFloat(m.match(/matrix\(([\d.]+)/)?.[1] ?? '1'));
 check(new Set(sc.map((x) => x.toFixed(2))).size >= 3 && Math.max(...sc) > 1.3, 'and it keeps playing in the view (its scale changes over time)', sc);
+// a section with a see-through canvas drawn over its heading (accessgrid's call to action): the heading, the text and
+// the canvas all stay, the heading keeps its own font and one line, and the canvas plays in the view
+await page.eval('window.__spViewClose?.()'); await wait(1300);
+const html2 = `<body style="margin:0;background:#fff;font-family:Helvetica"><section id="s" style="position:relative;overflow:hidden;padding:120px 0;background:#fff;font-family:Georgia"><canvas id="cv" width="1440" height="400" style="position:absolute;left:0;top:0;width:100%;height:100%;z-index:1;pointer-events:none"></canvas><div style="display:flex;flex-direction:column;align-items:center;gap:40px"><h2 style="font-size:56px;margin:0;text-align:center"><span style="display:block">Mobile credentials.</span><span style="display:block">Zero complexity.</span></h2><div style="position:relative;z-index:2;display:flex;gap:16px"><a style="background:#2b64f8;color:#fff;padding:8px 12px;border-radius:5px">Get started</a><a style="background:#eee;padding:8px 12px;border-radius:5px">Contact sales</a></div></div></section><script>const c = document.getElementById("cv").getContext("2d"); const go = (t) => { c.clearRect(0, 0, 1440, 400); c.strokeStyle = "#2b64f8"; c.strokeRect(200 + Math.sin(t / 300) * 40, 100, 60, 60); requestAnimationFrame(go); }; requestAnimationFrame(go);</script></body>`;
+await page.send('Page.navigate', { url: 'data:text/html,' + encodeURIComponent(html2) }); await wait(600);
+await page.eval(`window.__spTheme = ${JSON.stringify(THEME)}; window.__spIcons = ${JSON.stringify(ICONS)}; window.__spKit = (${spKit})(); window.__spSnap = ${snapshot}; window.__spViewer = ${viewer}; window.__spInstant = ${instant};`);
+const r2 = await page.eval(`(async () => { const x = await window.__spInstant(document.getElementById('s'), 'Section'); return x.layers.map((l) => l.name); })()`);
+check(r2.some((n) => /Mobile credentials/.test(n)) && r2.some((n) => /Zero complexity/.test(n)), 'a see-through canvas over the heading does not hide it', r2);
+check(r2.some((n) => /^Animation/.test(n)), 'the canvas is a live Animation layer', r2);
+await wait(1800);
+const lay = await page.eval(`(() => { const r = document.querySelector('site-prompt-view').shadowRoot; const sp = r.querySelector('.copy span'); const cs = getComputedStyle(sp); const cv = [...r.querySelectorAll('.copy canvas')]; const drawn = cv.some((k) => { try { return k.getContext('2d').getImageData(0, 0, k.width, k.height).data.some((v) => v > 0); } catch { return false; } }); return { font: cs.fontFamily, h: Math.round(sp.getBoundingClientRect().height / parseFloat(cs.lineHeight === 'normal' ? cs.fontSize : cs.lineHeight)), drawn }; })()`);
+check(/Georgia/.test(lay.font), 'the copy keeps the page font (the view styles do not leak in)', lay.font);
+check(lay.drawn, 'the canvas pixels are drawn in the view', lay);
 close();
 console.log(failures ? `\n${failures} failed` : '\nall passed');
 process.exit(failures ? 1 : 0);

@@ -31,7 +31,7 @@ export function viewer() {
 	}
 	root.innerHTML = `<style>
 		:host{all:initial}
-		*{box-sizing:border-box;margin:0;font-family:"Inter Variable",Inter,ui-sans-serif,-apple-system,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:-.006em}
+		:where(:not(.copy):not(.copy *):not(.whole):not(.whole *)){box-sizing:border-box;margin:0;font-family:"Inter Variable",Inter,ui-sans-serif,-apple-system,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:-.006em}
 		.v{--ink:#f7f8f8;--ink2:#d0d3d9;--muted:#8a8f98;--faint:#5c6068;--line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.12);--panel:#131315;--slab:#f4f4f5;--slabline:#d4d4d8;--blue:#2b64f8;--blue2:#3d7bff;--mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,monospace}
 		.canvas{position:fixed;inset:0;background-color:rgba(9,9,11,.94);background-image:radial-gradient(rgba(255,255,255,.07) 1px,transparent 1.2px);background-size:22px 22px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);opacity:0;transition:opacity .45s ease;cursor:grab}
 		.on .canvas{opacity:1}
@@ -168,9 +168,11 @@ export function viewer() {
 		.zb:hover{background:rgba(255,255,255,.07);color:var(--ink)}
 		.zb.pct{min-width:52px;font-size:11.5px;color:var(--muted)}
 		.bar kbd{font:500 10.5px/1 var(--mono);color:var(--muted);padding:3px 5px;border-radius:4px;box-shadow:inset 0 0 0 1px var(--line)}
+		.copy,.whole{all:initial;display:block}
 		.copy{position:absolute;left:0;top:0;transform:translateZ(.5px);pointer-events:none}
 		.copy *,.copy *::before,.copy *::after{transition:none!important;animation-name:none!important}
 		${V.html ? (V.rules ?? []).join('\n') : ''}
+		${V.html && V.rootW ? `.copy > .c0,.whole > .c0{width:${V.rootW}px!important;min-width:0!important;max-width:none!important;box-sizing:border-box!important;margin:0!important}` : ''}
 		${V.html ? V.layers.map((l, k) => `.p${k} *{visibility:hidden!important}${(l.members ?? [l.i]).map((m) => `.p${k} .c${m}`).join(',')}{visibility:visible!important}${l.force ? `.p${k} .c${l.i}{opacity:1!important}` : ''}`).join('\n') : ''}
 	</style>
 	<div class="v" style="${slabVars(V.bg)}">
@@ -293,7 +295,15 @@ export function viewer() {
 			if (!host.isConnected) return;
 			for (const m of mirrors) {
 				const cs = getComputedStyle(m.el);
-				for (const c of m.copies) for (const p of MIRROR) c.style.setProperty(p, cs.getPropertyValue(p));
+				for (const c of m.copies) {
+					for (const p of MIRROR) if (p !== 'width' && p !== 'height' || m.el.tagName !== 'CANVAS') c.style.setProperty(p, cs.getPropertyValue(p));
+					if (m.el.tagName === 'CANVAS' && c.tagName === 'CANVAS') {
+						try {
+							if (c.width !== m.el.width || c.height !== m.el.height) { c.width = m.el.width; c.height = m.el.height; }
+							const g = c.getContext('2d'); g.clearRect(0, 0, c.width, c.height); g.drawImage(m.el, 0, 0);
+						} catch {}
+					}
+				}
 			}
 			requestAnimationFrame(step);
 		};
@@ -416,6 +426,7 @@ export function viewer() {
 		const pad = (l.layout ?? []).find((r) => r.k === 'Padding'); if (pad) rows.push({ k: 'Padding', v: pad.v, pill: true });
 		const sh = find(/^Shadow/); if (sh && rows.length < 4) rows.push(sh);
 		if (!rows.length) { const sz = find(/^Size/); if (sz) rows.push(sz); }
+		if (!rows.length && l.moving) rows.push(...look.slice(0, 2));
 		return rows.slice(0, 4);
 	};
 	const buildCallouts = () => {
@@ -425,9 +436,9 @@ export function viewer() {
 		if (!comp) return;
 		// the parts worth a callout: not the whole panel, the bigger and more telling ones first, eight at most
 		const W = V.size.w, H = V.size.h;
-		let pick = V.layers.map((l, k) => ({ l, k, q: quadOf(k) })).filter((x) => !(x.l.box && x.l.box.w >= W * 0.95 && x.l.box.h >= H * 0.95));
+		let pick = V.layers.map((l, k) => ({ l, k, q: quadOf(k) })).filter((x) => x.l.moving || !(x.l.box && x.l.box.w >= W * 0.95 && x.l.box.h >= H * 0.95));
 		if (!pick.length) pick = V.layers.map((l, k) => ({ l, k, q: quadOf(k) }));
-		pick = pick.sort((a, b) => (b.l.box?.w * b.l.box?.h || 0) - (a.l.box?.w * a.l.box?.h || 0)).slice(0, 8);
+		pick = pick.sort((a, b) => (b.l.moving - a.l.moving) || (b.l.box?.w * b.l.box?.h || 0) - (a.l.box?.w * a.l.box?.h || 0)).slice(0, 8);
 		// one column on the left (the detail card has the right), as many as fit the screen
 		const avail = innerHeight - 84 - 96;
 		const per = avail / Math.max(1, pick.length) >= 120 ? 4 : avail / Math.max(1, pick.length) >= 76 ? 2 : 1;
@@ -597,11 +608,23 @@ export async function instant(el, title, area = null, show = true) {
 	const moving = new Set();
 	for (const [i, e] of live) if (i !== 0 && before.get(i) !== look(e)) moving.add(i);
 	for (const [i, e] of live) if (i !== 0 && e.getAnimations().some((an) => an.effect?.target === e && an.constructor.name !== 'CSSTransition' && an.playState === 'running')) moving.add(i);
+	// a canvas is drawn by a script: it plays live (its pixels are copied into the view every frame)
+	for (const [i, e] of live) if (i !== 0 && e.tagName === 'CANVAS' && e.width * e.height >= 1600) moving.add(i);
 	// a moving part's own moving children move with it: keep the top-most
 	const movingTop = new Set([...moving].filter((i) => { for (let x = live.get(i)?.parentElement; x && x !== el; x = x.parentElement) { const j = x.getAttribute('data-sp-n'); if (j != null && moving.has(+j)) return false; } return true; }));
 	// what can actually be seen: a part entirely covered by others (an icon behind a card) is not torn out of the picture
 	const R = { left: a.vis.x, top: a.vis.y };
 	const covered = new Set();
+	const blocks = (t) => {
+		if (/^(CANVAS|svg)$/i.test(t.tagName) || t.closest?.('svg') && t.tagName.toLowerCase() !== 'svg' || t.closest('site-prompt-ui,site-prompt-view')) return false;
+		const j = t.getAttribute?.('data-sp-n');
+		if (j != null && moving.has(+j)) return false;
+		const c = getComputedStyle(t);
+		if (parseFloat(c.opacity) < 0.6 || c.visibility === 'hidden') return false;
+		if (/^(IMG|VIDEO|PICTURE|IFRAME)$/.test(t.tagName)) return true;
+		const v = (c.backgroundColor.match(/[\d.]+/g) ?? []).map(Number);
+		return v.length >= 3 && (v[3] ?? 1) > 0.6 || /url\(/.test(c.backgroundImage);
+	};
 	const pe = document.createElement('style');
 	pe.textContent = '[data-sp-n]{pointer-events:auto!important}';
 	document.head.appendChild(pe);
@@ -614,8 +637,12 @@ export async function instant(el, title, area = null, show = true) {
 			for (let gy = 1; gy <= 4 && !hits; gy++) for (let gx = 1; gx <= 4 && !hits; gx++) {
 				const x = R.left + n.box.x + (n.box.w * gx) / 5, y = R.top + n.box.y + (n.box.h * gy) / 5;
 				if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) { hits++; continue; } // off screen: cannot tell, keep it
-				const top = document.elementFromPoint(x, y);
-				if (top && (top === e || e.contains(top))) hits++;
+				// look down through what lies above it: only something that really hides it (a filled box, a picture) counts;
+				// a see-through canvas, an outline, a text layer or a moving overlay on top does not
+				for (const t of document.elementsFromPoint(x, y)) {
+					if (t === e || e.contains(t)) { hits++; break; }
+					if (blocks(t)) break;
+				}
 			}
 			if (!hits) covered.add(n.i);
 		}
@@ -772,9 +799,9 @@ export async function instant(el, title, area = null, show = true) {
 	}));
 	// the view mirrors the moving parts from the page every frame (the page keeps animating underneath)
 	const mirror = [...moving].map((i) => ({ i, el: live.get(i) })).filter((m) => m.el);
-	const V = { el, title, area, mirror, html: snap.html, rules: snap.rules, bg, size: { w: r.width, h: r.height }, offset: visOff, clip: { w: r.width, h: r.height }, layers };
+	const V = { el, title, area, mirror, html: snap.html, rules: snap.rules, bg, rootW: Math.round(r0.width * 100) / 100, size: { w: r.width, h: r.height }, offset: visOff, clip: { w: r.width, h: r.height }, layers };
 	// at another width (the server lays it out there): the view's data only, nothing shown
-	if (!show) return { title, html: snap.html, rules: snap.rules, bg, size: V.size, offset: V.offset, clip: V.clip, layers, width: innerWidth };
+	if (!show) return { title, html: snap.html, rules: snap.rules, bg, rootW: V.rootW, size: V.size, offset: V.offset, clip: V.clip, layers, width: innerWidth };
 	V.width = innerWidth;
 	window.__spView = V;
 	window.__spViewer();
