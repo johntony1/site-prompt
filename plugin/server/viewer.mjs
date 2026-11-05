@@ -666,6 +666,10 @@ export async function instant(el, title, area = null, show = true, pre = null) {
 			if (!hits) covered.add(n.i);
 		}
 	} finally { pe.remove(); }
+	// a safety net: when much of what they picked would count as hidden, the check is fooled (an overlay, a stacking
+	// trick), not the picture: keep every part rather than lose what they can see
+	const candidates = a.nodes.filter((n) => n !== a.nodes[0] && !moving.has(n.i) && (n.paint.length || Object.values(n.pseudos).some((v) => v.paint.length)) && n.box.w >= 2 && n.box.h >= 2 && n.op > 0.04).length;
+	if (covered.size > Math.max(3, candidates / 3)) covered.clear();
 	const seenNodes = a.nodes.map((n) => (covered.has(n.i) ? { ...n, paint: [], pseudos: {} } : moving.has(n.i) ? { ...n, anim: true } : n));
 	// motion as background (a few floating parts) gets its own layer; motion that IS the drawing (most of it moves, or
 	// it is an svg) stays in its groups and plays there: the mirror animates every copy wherever it sits
