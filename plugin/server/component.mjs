@@ -67,6 +67,7 @@ export function snapshot(sel) {
 	fd.open(); fd.write('<!doctype html><html><head></head><body></body></html>'); fd.close();
 	const defaults = new Map();
 	const SVG = 'http://www.w3.org/2000/svg';
+	const bodyDef = (() => { const d = fd.defaultView.getComputedStyle(fd.body), o = {}; for (let i = 0; i < d.length; i++) o[d[i]] = d.getPropertyValue(d[i]); return o; })();
 	const defOf = (el, pseudo) => {
 		const key = (el.namespaceURI === SVG ? 'svg:' : '') + el.localName + (pseudo ?? '') + (el.localName === 'a' && el.hasAttribute('href') ? '[href]' : '') + (el.localName === 'input' ? `[${el.getAttribute('type') || 'text'}]` : '');
 		if (defaults.has(key)) return defaults.get(key);
@@ -101,7 +102,9 @@ export function snapshot(sel) {
 			if (SKIP.has(p) || p.startsWith('--') || LOGICAL.test(p) || (p.startsWith('-webkit-') && !KEEP_WEBKIT.test(p))) continue;
 			const v = cs.getPropertyValue(p);
 			if (CURRENT.has(p) && v === cs.color) continue; // currentColor, follows color
-			if (INHERITED.has(p) && !isRoot && parentCs && parentCs.getPropertyValue(p) === v) continue;
+			// inherited and the same as the parent: left out, unless the browser sets it on this kind of element itself
+			// (a link's colour and underline, a button's font): then a copy would not inherit it
+			if (INHERITED.has(p) && !isRoot && parentCs && parentCs.getPropertyValue(p) === v && !(def[p] !== undefined && bodyDef[p] !== undefined && def[p] !== bodyDef[p])) continue;
 			if (!(INHERITED.has(p) && isRoot) && def[p] === v) continue;
 			if (INHERITED.has(p) && isRoot && def[p] === v) continue;
 			out.push(`${p}:${v}`);

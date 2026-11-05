@@ -114,6 +114,29 @@ export function viewer() {
 		.b.p:hover:after{opacity:1}
 		.b.done{color:#4cb782}
 		.b.p.done{color:#fff}
+		.v.specs .plane .slab,.v.specs .plane .edge,.v.specs .plane .tag{opacity:0!important}
+		.v.specs .plane.hot .slab{opacity:1!important;background:transparent!important;box-shadow:0 0 0 1.5px var(--blue2),0 0 0 6px rgba(61,123,255,.16)!important}
+		.v.specs .labels{display:none}
+		.v.specs .spec{opacity:0;pointer-events:none}
+		.v.specs.kept .spec{opacity:1;pointer-events:auto}
+		.v.specs.kept .callout.r{opacity:.08;pointer-events:none}
+		.callouts{position:fixed;inset:0;pointer-events:none}
+		.callout{position:fixed;width:216px;padding:10px 12px 8px;border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0) 40%),var(--panel);box-shadow:0 0 0 1px var(--line),0 0 0 1px rgba(0,0,0,.5),0 14px 30px -14px rgba(0,0,0,.7);pointer-events:auto;cursor:pointer;opacity:0;transform:translateY(4px);transition:opacity .35s ease,transform .45s cubic-bezier(.2,.8,.2,1),box-shadow .15s ease}
+		.callout.in{opacity:1;transform:none}
+		.callout:hover,.callout.hot{box-shadow:0 0 0 1px rgba(61,123,255,.6),0 0 0 4px rgba(61,123,255,.14),0 14px 30px -14px rgba(0,0,0,.7)}
+		.callout b{display:block;font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+		.callout .cr{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11.5px;min-height:22px}
+		.callout .cr span{color:var(--muted);white-space:nowrap}
+		.callout .cr em{font-style:normal;color:var(--ink2);display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+		.callout .cr em s{width:10px;height:10px;border-radius:50%;flex:none;box-shadow:0 0 0 1px rgba(255,255,255,.25) inset}
+		.callout .cr em .pill{font:600 10.5px/1 var(--mono);color:#fff;background:#2b8cf8;padding:3px 5px;border-radius:4px}
+		svg.callines{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+		svg.callines path{fill:none;stroke:rgba(255,255,255,.28);stroke-width:1}
+		svg.callines path.hot{stroke:var(--blue2)}
+		svg.callines circle{fill:#09090b;stroke:rgba(255,255,255,.55);stroke-width:1.25}
+		svg.callines circle.hot{stroke:var(--blue2)}
+		.v.specs .sld{opacity:.35;pointer-events:none}
+		.v.specs [data-a=flat]{display:none}
 		.sizes{position:fixed;left:50%;top:22px;transform:translateX(-50%);display:flex;gap:2px;padding:3px;border-radius:11px;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0) 40%),var(--panel);box-shadow:0 0 0 1px var(--line),0 0 0 1px rgba(0,0,0,.55),0 16px 32px -12px rgba(0,0,0,.6);opacity:0;transition:opacity .4s ease .5s}
 		.on .sizes{opacity:1}
 		.sz{appearance:none;border:0;height:30px;padding:0 12px;border-radius:8px;display:flex;align-items:center;gap:7px;background:transparent;color:var(--muted);font-size:12.5px;font-weight:550;cursor:pointer;transition:background .12s ease,color .12s ease}
@@ -149,13 +172,13 @@ export function viewer() {
 	</style>
 	<div class="v" style="${slabVars(V.bg)}">
 		<div class="canvas"></div>
-		<div class="stage"><div class="stack">${V.layers.map((l, k) => `<div class="plane" data-k="${k}"><div class="edge"></div><div class="slab"><i class="q"></i><i class="q"></i><i class="q"></i><i class="q"></i></div>${V.html ? `<div class="copy p${k}">${V.html}</div>` : l.png ? `<img src="data:image/png;base64,${l.png}">` : ''}<span class="tag">${pad2(l.n)}</span><i class="pin l"></i><i class="pin r"></i></div>`).join('')}</div></div>
-		<svg class="lines"><path class="lab" d=""/><circle class="lab" r="3" cx="-9" cy="-9"/><path class="card" d=""/><circle class="card" r="3" cx="-9" cy="-9"/></svg>
+		<div class="stage"><div class="stack">${V.layers.map((l, k) => `<div class="plane" data-k="${k}"><div class="edge"></div><div class="slab"><i class="q"></i><i class="q"></i><i class="q"></i><i class="q"></i></div>${V.html ? `<div class="copy p${k}" style="left:${-(V.offset?.x || 0)}px;top:${-(V.offset?.y || 0)}px">${V.html}</div>` : l.png ? `<img src="data:image/png;base64,${l.png}">` : ''}<span class="tag">${pad2(l.n)}</span><i class="pin l"></i><i class="pin r"></i></div>`).join('')}</div></div>
+		<svg class="callines"></svg><div class="callouts"></div><svg class="lines"><path class="lab" d=""/><circle class="lab" r="3" cx="-9" cy="-9"/><path class="card" d=""/><circle class="card" r="3" cx="-9" cy="-9"/></svg>
 		<div class="sizes">${SIZES.map((z) => `<button class="sz" data-z="${z.id}" title="${z.w} × ${z.h}"><span>${z.name}</span><i>${z.w}</i></button>`).join('')}</div>
-		<div class="head"><small>Breakdown</small><h2>${esc(V.title)}</h2><p>${n} layers · hover one to inspect · drag to turn</p><div class="was"><span>You picked</span><div class="thumb"><div class="tin">${V.html ? `<div class="whole">${V.html}</div>` : V.layers.map((l) => (l.png ? `<img src="data:image/png;base64,${l.png}">` : '')).join('')}</div></div></div></div>
+		<div class="head"><small>Breakdown</small><h2>${esc(V.title)}</h2><p>${n} layers · hover one to inspect · drag to turn</p><div class="was"><span>You picked</span><div class="thumb"><div class="tin">${V.html ? `<div class="whole" style="position:absolute;left:${-(V.offset?.x || 0)}px;top:${-(V.offset?.y || 0)}px">${V.html}</div>` : V.layers.map((l) => (l.png ? `<img src="data:image/png;base64,${l.png}">` : '')).join('')}</div></div></div></div>
 		<div class="labels">${V.layers.slice().reverse().map((l) => `<div class="label" data-k="${l.n - 1}"><b>${pad2(l.n)}</b>${esc(l.name.replace(/ \(layer-\d+\.\w+\)/, ''))}</div>`).join('')}</div>
 		<div class="spec"></div>
-		<div class="bar"><div class="views"><button class="vb on" data-v="top" title="From above"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 2.5l5.5 3L8 8.5l-5.5-3L8 2.5z"/><path d="M2.5 8.5L8 11.5l5.5-3"/><path d="M2.5 11L8 14l5.5-3" opacity=".55"/></svg></button><button class="vb" data-v="front" title="Facing you"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="2" y="3.5" width="7" height="9" rx="1.2"/><path d="M11 4.5v7M13.5 5.5v5" opacity=".75"/></svg></button></div><span class="sep"></span><div class="sld" role="slider" tabindex="0" aria-label="Spread" aria-valuemin="0" aria-valuemax="100"><div class="fill"><span>Spread</span><b></b></div><div class="dots"><i></i><i></i><i></i><i></i><i></i><i></i></div><em></em></div><button class="b" data-a="flat">Flatten</button><span class="sep"></span><button class="b p" data-a="all">Copy whole thing</button><button class="b" data-a="close">Close <kbd>esc</kbd></button></div>
+		<div class="bar"><div class="views"><button class="vb" data-v="specs" title="Specs: flat, with callouts"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="4.5" y="5" width="7" height="6" rx="1.2"/><path d="M4.5 8H2M11.5 8H14M8 5V2.5" opacity=".7"/></svg></button><button class="vb on" data-v="top" title="From above"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 2.5l5.5 3L8 8.5l-5.5-3L8 2.5z"/><path d="M2.5 8.5L8 11.5l5.5-3"/><path d="M2.5 11L8 14l5.5-3" opacity=".55"/></svg></button><button class="vb" data-v="front" title="Facing you"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="2" y="3.5" width="7" height="9" rx="1.2"/><path d="M11 4.5v7M13.5 5.5v5" opacity=".75"/></svg></button></div><span class="sep"></span><div class="sld" role="slider" tabindex="0" aria-label="Spread" aria-valuemin="0" aria-valuemax="100"><div class="fill"><span>Spread</span><b></b></div><div class="dots"><i></i><i></i><i></i><i></i><i></i><i></i></div><em></em></div><button class="b" data-a="flat">Flatten</button><span class="sep"></span><button class="b p" data-a="all">Copy whole thing</button><button class="b" data-a="close">Close <kbd>esc</kbd></button></div>
 	</div>`;
 	document.documentElement.appendChild(host);
 	const $ = (s) => root.querySelector(s);
@@ -193,6 +216,18 @@ export function viewer() {
 	if (V.again) r = { left: (innerWidth - V.size.w) / 2, top: (innerHeight - V.size.h) / 2, width: V.size.w, height: V.size.h };
 	Object.assign(stage.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
 	Object.assign(stack.style, { left: V.offset.x + 'px', top: V.offset.y + 'px', width: V.clip.w + 'px', height: V.clip.h + 'px' });
+	// is it really stacked? where do three or more layers lie on top of each other
+	const depth = (() => {
+		let max = 0;
+		const W = V.size.w || 1, H = V.size.h || 1, bx = V.layers.map((l) => l.box).filter(Boolean);
+		for (let gy = 0; gy < 14; gy++) for (let gx = 0; gx < 14; gx++) {
+			const x = (gx + 0.5) * W / 14, y = (gy + 0.5) * H / 14;
+			const c = bx.filter((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h && !(b.w >= W * 0.95 && b.h >= H * 0.95)).length;
+			if (c > max) max = c;
+		}
+		return max;
+	})();
+	let mode = V.view ?? (depth >= 3 ? 'top' : 'specs');
 	let hot = null;
 	const ANGLES_START = { ry: 0, rx: 55, rz: -40 };
 	let ry = 0, rx = 0, rz = 0, spread = V.spread ?? 0.6, flat = false, tx = 0, ty = 0, sc = 1;
@@ -202,7 +237,7 @@ export function viewer() {
 		planes.forEach((p, k) => { p.style.transform = `translateZ(${k * gap() + (k === hot && !flat ? gap() * 0.35 : 0)}px)`; });
 	};
 	// the free space: between the labels on the left and the card on the right
-	const space = () => ({ l: 290, r: innerWidth - 390, t: 70, b: innerHeight - 90 });
+	const space = () => (mode === 'specs' ? { l: 270, r: innerWidth - 270, t: 96, b: innerHeight - 96 } : { l: 290, r: innerWidth - 390, t: 70, b: innerHeight - 90 });
 	const refit = () => {
 		let u = null;
 		for (const p of planes) for (const q of [p.querySelector('.slab').getBoundingClientRect(), p.querySelector('.edge').getBoundingClientRect(), p.querySelector('.tag').getBoundingClientRect()]) u = u ? { l: Math.min(u.l, q.left), t: Math.min(u.t, q.top), r: Math.max(u.r, q.right), b: Math.max(u.b, q.bottom) } : { l: q.left, t: q.top, r: q.right, b: q.bottom };
@@ -230,7 +265,8 @@ export function viewer() {
 		// lift off: flat over the element, then turn and split. Where it ends up is measured first, with transitions off.
 		const all = [stack, ...planes];
 		all.forEach((e) => (e.style.transition = 'none'));
-		({ ry, rx, rz } = V.angle ?? ANGLES_START);
+		({ ry, rx, rz } = mode === 'specs' ? { ry: 0, rx: 0, rz: 0 } : V.angle ?? ANGLES_START);
+		if (mode === 'specs') { flat = true; v.classList.add('specs'); }
 		apply(); refit(); refit();
 		const target = { ry, rx, rz, tx, ty, sc };
 		if (!V.again) { ry = 0; rx = 0; rz = 0; tx = 0; ty = 0; sc = 1; flat = true; apply(); }
@@ -239,10 +275,10 @@ export function viewer() {
 		planes.forEach((p, k) => (p.style.transitionDelay = `${k * 40}ms`));
 		requestAnimationFrame(() => requestAnimationFrame(() => {
 			({ ry, rx, rz, tx, ty, sc } = target);
-			flat = false;
+			flat = mode === 'specs';
 			v.classList.add('on');
 			apply();
-			setTimeout(() => { planes.forEach((p) => (p.style.transitionDelay = '')); setHot(n - 1); }, 1000 + n * 40);
+			setTimeout(() => { planes.forEach((p) => (p.style.transitionDelay = '')); if (mode === 'specs') buildCallouts(); else setHot(n - 1); }, 1000 + n * 40);
 		}));
 	});
 	const MIRROR = ['transform', 'opacity', 'filter', 'translate', 'scale', 'rotate', 'stroke-dashoffset', 'stroke-dasharray', 'stroke', 'fill', 'stroke-opacity', 'fill-opacity', 'clip-path', 'offset-distance', 'background-position', 'width', 'height', 'd'];
@@ -303,12 +339,13 @@ export function viewer() {
 		card.querySelector('[data-c=css]').addEventListener('click', (e) => V.layers[k].css && copy(V.layers[k].css, e.currentTarget, 'Copy CSS'));
 	};
 	const lines = () => {
-		if (hot == null) { labPath.setAttribute('d', ''); cardPath.setAttribute('d', ''); labDot.setAttribute('cx', -9); cardDot.setAttribute('cx', -9); return; }
+		if (mode === 'specs' && hot != null) drawCallLines();
+		if (hot == null || (mode === 'specs' && pinned == null)) { labPath.setAttribute('d', ''); cardPath.setAttribute('d', ''); labDot.setAttribute('cx', -9); cardDot.setAttribute('cx', -9); return; }
+		if (mode === 'specs') { labPath.setAttribute('d', ''); labDot.setAttribute('cx', -9); }
 		const lab = labels.find((x) => +x.dataset.k === hot).getBoundingClientRect();
 		const pl = planes[hot].querySelector('.pin.l').getBoundingClientRect(), pr = planes[hot].querySelector('.pin.r').getBoundingClientRect();
 		const x1 = lab.right + 8, y1 = lab.top + lab.height / 2;
-		labPath.setAttribute('d', `M${x1},${y1} L${Math.max(x1 + 16, pl.left - 36)},${y1} L${pl.left},${pl.top}`);
-		labDot.setAttribute('cx', pl.left); labDot.setAttribute('cy', pl.top);
+		if (mode !== 'specs') { labPath.setAttribute('d', `M${x1},${y1} L${Math.max(x1 + 16, pl.left - 36)},${y1} L${pl.left},${pl.top}`); labDot.setAttribute('cx', pl.left); labDot.setAttribute('cy', pl.top); }
 		const c = card.getBoundingClientRect();
 		const y2 = Math.min(c.bottom - 24, Math.max(c.top + 24, pr.top));
 		cardPath.setAttribute('d', `M${pr.left},${pr.top} L${Math.min(c.left - 16, pr.left + 36)},${pr.top} L${c.left - 16},${y2} L${c.left},${y2}`);
@@ -357,23 +394,99 @@ export function viewer() {
 		for (let j = planes.length - 1; j >= 0; j--) if (inside(corners(planes[j]), e.clientX, e.clientY)) { k = j; break; }
 		keep(k);
 	});
+	// ---- Specs: callout cards around the flat element, each joined to its part
+	const callBox = $('.callouts'), callSvg = $('svg.callines');
+	let calls = [];
+	const clearCallouts = () => { callBox.innerHTML = ''; callSvg.innerHTML = ''; calls = []; };
+	const quadOf = (k) => { const q = corners(planes[k]); const xs = q.map((p) => p[0]), ys = q.map((p) => p[1]); return { l: Math.min(...xs), r: Math.max(...xs), t: Math.min(...ys), b: Math.max(...ys) }; };
+	const keyRows = (l) => {
+		const rows = [];
+		const look = l.specs ?? [];
+		const find = (re) => look.find((r) => re.test(r.k));
+		for (const re of [/^Fill/, /^Gradient/, /^Stroke/]) { const r = find(re); if (r) rows.push(r); }
+		const type = l.type ?? [];
+		const size = type.find((r) => r.k === 'Size / line'), weight = type.find((r) => r.k === 'Weight');
+		if (size) rows.push({ k: 'Text style', v: `${size.v.split(' / ')[0]}${weight ? ` · ${weight.v}` : ''}` });
+		const rad = find(/^Corner radius/); if (rad) rows.push(rad);
+		const pad = (l.layout ?? []).find((r) => r.k === 'Padding'); if (pad) rows.push({ k: 'Padding', v: pad.v, pill: true });
+		const sh = find(/^Shadow/); if (sh && rows.length < 4) rows.push(sh);
+		if (!rows.length) { const sz = find(/^Size/); if (sz) rows.push(sz); }
+		return rows.slice(0, 4);
+	};
+	const buildCallouts = () => {
+		clearCallouts();
+		if (mode !== 'specs') return;
+		const comp = (() => { let u = null; for (let k = 0; k < planes.length; k++) { const q = quadOf(k); u = u ? { l: Math.min(u.l, q.l), r: Math.max(u.r, q.r), t: Math.min(u.t, q.t), b: Math.max(u.b, q.b) } : { ...q }; } return u; })();
+		if (!comp) return;
+		// the parts worth a callout: not the whole panel, the bigger and more telling ones first, eight at most
+		const W = V.size.w, H = V.size.h;
+		let pick = V.layers.map((l, k) => ({ l, k, q: quadOf(k) })).filter((x) => !(x.l.box && x.l.box.w >= W * 0.95 && x.l.box.h >= H * 0.95));
+		if (!pick.length) pick = V.layers.map((l, k) => ({ l, k, q: quadOf(k) }));
+		pick = pick.sort((a, b) => (b.l.box?.w * b.l.box?.h || 0) - (a.l.box?.w * a.l.box?.h || 0)).slice(0, 8);
+		const mid = (comp.l + comp.r) / 2;
+		const cols = { l: [], r: [] };
+		for (const x of pick) (((x.q.l + x.q.r) / 2 < mid) ? cols.l : cols.r).push(x);
+		// keep both columns in use
+		if (!cols.l.length && cols.r.length > 1) cols.l.push(...cols.r.splice(0, Math.floor(cols.r.length / 2)));
+		if (!cols.r.length && cols.l.length > 1) cols.r.push(...cols.l.splice(Math.ceil(cols.l.length / 2)));
+		for (const side of ['l', 'r']) {
+			const list = cols[side].sort((a, b) => (a.q.t + a.q.b) - (b.q.t + b.q.b));
+			let floor = 84;
+			for (const x of list) {
+				const rows = keyRows(x.l);
+				const el2 = document.createElement('div');
+				el2.className = `callout ${side}`;
+				el2.innerHTML = `<b>${esc(x.l.name.replace(/ \(layer-\d+\.\w+\)/, ''))}</b>${rows.map((r) => `<div class="cr"><span>${esc(r.k)}</span><em>${r.sw ? `<s style="background:${esc(r.sw)}"></s>` : ''}${r.pill ? `<i class="pill">${esc(r.v)}</i>` : esc(r.v)}</em></div>`).join('')}`;
+				callBox.appendChild(el2);
+				const h = el2.getBoundingClientRect().height;
+				const want = (x.q.t + x.q.b) / 2 - h / 2;
+				const y = Math.max(floor, Math.min(innerHeight - 96 - h, want));
+				floor = y + h + 10;
+				el2.style.top = y + 'px';
+				el2.style.left = (side === 'l' ? Math.max(16, comp.l - 48 - 216) : Math.min(innerWidth - 232, comp.r + 48)) + 'px';
+				el2.addEventListener('mouseenter', () => { if (pinned == null) setHot(x.k); });
+				el2.addEventListener('click', () => keep(pinned === x.k ? null : x.k));
+				calls.push({ el: el2, k: x.k, side });
+				requestAnimationFrame(() => el2.classList.add('in'));
+			}
+		}
+		drawCallLines();
+	};
+	const drawCallLines = () => {
+		if (mode !== 'specs') { callSvg.innerHTML = ''; return; }
+		let out = '';
+		for (const c of calls) {
+			const b = c.el.getBoundingClientRect(), q = quadOf(c.k);
+			const ax = c.side === 'l' ? q.l : q.r, ay = Math.max(q.t + 4, Math.min(q.b - 4, b.top + b.height / 2));
+			const sx = c.side === 'l' ? b.right : b.left, sy = b.top + b.height / 2;
+			const mx = c.side === 'l' ? Math.max(sx + 14, ax - 22) : Math.min(sx - 14, ax + 22);
+			const isHot = c.k === hot;
+			out += `<path class="${isHot ? 'hot' : ''}" d="M${sx},${sy} L${mx},${sy} L${mx},${ay} L${ax},${ay}"/><circle class="${isHot ? 'hot' : ''}" r="3" cx="${ax}" cy="${ay}"/>`;
+			c.el.classList.toggle('hot', isHot);
+		}
+		callSvg.innerHTML = out;
+	};
+	addEventListener('resize', () => { if (mode === 'specs') { refit(); setTimeout(buildCallouts, 60); } });
 	const ANGLES = { top: { ry: 0, rx: 55, rz: -40 }, front: { ry: -38, rx: 8, rz: 0 } };
 	const views = [...root.querySelectorAll('.vb')];
-	if (V.view) views.forEach((b) => b.classList.toggle('on', b.dataset.v === V.view));
+	views.forEach((b) => b.classList.toggle('on', b.dataset.v === mode));
 	const setView = (name) => {
 		views.forEach((b) => b.classList.toggle('on', b.dataset.v === name));
 		const was = { tx, ty, sc };
 		// where it will sit, measured with transitions off, then animated there
 		const all2 = [stack, ...planes];
 		all2.forEach((e) => (e.style.transition = 'none'));
-		({ ry, rx, rz } = ANGLES[name]);
-		flat = false; flatBtn.textContent = 'Flatten';
+		mode = name;
+		v.classList.toggle('specs', name === 'specs');
+		clearCallouts();
+		({ ry, rx, rz } = name === 'specs' ? { ry: 0, rx: 0, rz: 0 } : ANGLES[name]);
+		flat = name === 'specs'; flatBtn.textContent = 'Flatten';
 		tx = 0; ty = 0; sc = 1; apply(); refit(); refit();
 		const to = { tx, ty, sc };
 		({ tx, ty, sc } = was); apply();
 		stack.getBoundingClientRect();
 		all2.forEach((e) => (e.style.transition = ''));
-		requestAnimationFrame(() => { ({ tx, ty, sc } = to); apply(); });
+		requestAnimationFrame(() => { ({ tx, ty, sc } = to); apply(); if (name === 'specs') setTimeout(buildCallouts, 1050); });
 	};
 	views.forEach((b) => b.addEventListener('click', () => setView(b.dataset.v)));
 	// the spread slider: drag anywhere along it, arrows step it
@@ -414,7 +527,7 @@ export function viewer() {
 		const d = id === mine ? V.sizes.__mine : V.sizes[id];
 		if (!d || d.missing || d.hidden) return;
 		const base = V.sizes.__mine ?? V;
-		window.__spView = { ...d, el, title: base.title, all: base.all, mirror: id === mine ? base.mirror : null, sizes: V.sizes, sizeId: id, mineSize: mine, width: V.width, was, again: true, spread, angle: { ry, rx, rz }, view: root.querySelector('.vb.on')?.dataset.v };
+		window.__spView = { ...d, el, title: base.title, all: base.all, mirror: id === mine ? base.mirror : null, sizes: V.sizes, sizeId: id, mineSize: mine, width: V.width, was, again: true, spread, angle: { ry, rx, rz }, view: mode };
 		window.__spViewer();
 	}));
 	V.sizes.__mine ??= { ...V };
@@ -466,7 +579,7 @@ export async function instant(el, title, area = null, show = true) {
 	// a moving part's own moving children move with it: keep the top-most
 	const movingTop = new Set([...moving].filter((i) => { for (let x = live.get(i)?.parentElement; x && x !== el; x = x.parentElement) { const j = x.getAttribute('data-sp-n'); if (j != null && moving.has(+j)) return false; } return true; }));
 	// what can actually be seen: a part entirely covered by others (an icon behind a card) is not torn out of the picture
-	const R = el.getBoundingClientRect();
+	const R = { left: a.vis.x, top: a.vis.y };
 	const covered = new Set();
 	const pe = document.createElement('style');
 	pe.textContent = '[data-sp-n]{pointer-events:auto!important}';
@@ -628,7 +741,8 @@ export async function instant(el, title, area = null, show = true) {
 	let bg = null;
 	for (let x = el; x && !bg; x = x.parentElement) { const c = getComputedStyle(x).backgroundColor; if (c && c !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(c)) bg = c; }
 	bg ??= '#ffffff';
-	const r = el.getBoundingClientRect();
+	const r0 = el.getBoundingClientRect(), r = { width: a.vis.w, height: a.vis.h };
+	const visOff = { x: Math.round(a.vis.x - r0.left), y: Math.round(a.vis.y - r0.top) };
 	const hiddenNote = covered.size ? { k: 'Hidden behind others', v: `${covered.size} ${covered.size > 1 ? 'parts' : 'part'}` } : null;
 	const layers = groups.map((g, k) => ({
 		n: k + 1, i: g.i, sub: g.sub, members: g.members, name: g.name, box: g.box, moving: !!g.moving, force: !g.moving && g.n.fx.opacity === '0',
@@ -637,7 +751,7 @@ export async function instant(el, title, area = null, show = true) {
 	}));
 	// the view mirrors the moving parts from the page every frame (the page keeps animating underneath)
 	const mirror = [...moving].map((i) => ({ i, el: live.get(i) })).filter((m) => m.el);
-	const V = { el, title, area, mirror, html: snap.html, rules: snap.rules, bg, size: { w: r.width, h: r.height }, offset: { x: 0, y: 0 }, clip: { w: r.width, h: r.height }, layers };
+	const V = { el, title, area, mirror, html: snap.html, rules: snap.rules, bg, size: { w: r.width, h: r.height }, offset: visOff, clip: { w: r.width, h: r.height }, layers };
 	// at another width (the server lays it out there): the view's data only, nothing shown
 	if (!show) return { title, html: snap.html, rules: snap.rules, bg, size: V.size, offset: V.offset, clip: V.clip, layers, width: innerWidth };
 	V.width = innerWidth;

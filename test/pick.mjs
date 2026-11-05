@@ -185,6 +185,9 @@ try {
 	const learn = await learnCall;
 	await watchView;
 	console.log(`      (Break it down: the 3D view was up after ${((tView - tLearn) / 1000).toFixed(1)} s; everything done after ${((Date.now() - tLearn) / 1000).toFixed(1)} s)`);
+	check(await ev(`(() => { const r = document.querySelector('site-prompt-view').shadowRoot; return r.querySelector('.vb.on')?.dataset.v === 'specs' && r.querySelectorAll('.callout').length >= 1; })()`), 'a flat pick opens in Specs, with callouts');
+	await ev(`document.querySelector('site-prompt-view').shadowRoot.querySelector('.callout')?.click()`);
+	await sleep(500);
 	check(await ev(`(() => { const r = document.querySelector('site-prompt-view').shadowRoot; return !!r.querySelector('.spec [data-c=prompt]') && /Copy whole thing/.test(r.textContent); })()`), 'the view has a spec card with Copy prompt, and Copy whole thing');
 	check(await ev(`(() => { const r = document.querySelector('site-prompt-view').shadowRoot; return /Moves on hover|Motion/.test(r.querySelector('.spec').textContent) && !/recording/.test(r.querySelector('.spec').textContent); })()`), 'the motion arrives in the card when it is recorded');
 	writeFileSync(path.join(out, 'learn.txt'), learn.words);

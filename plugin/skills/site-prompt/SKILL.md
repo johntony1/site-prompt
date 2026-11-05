@@ -60,7 +60,9 @@ made, want to learn it, or want their own version), `site_pick` returns BREAK IT
 layers bottom to top, what each paints and the technique that makes it (stacked shadows, gradient masks, ::before
 layers, tilts, things hidden until hover or scroll), an exploded view (exploded.png), each layer alone (layers/) and
 the build in steps with a picture per step (steps/). It is also taken apart on the page itself, where they picked
-it: the element lifts off and splits into light layers in 3D on a dark canvas, labelled down the left, with a spec
+it: a flat pick (a nav bar, a card list) opens in Specs, laid flat with callout cards (fills, text style, radius,
+padding) joined to each part; a stacked one (an illustration) lifts off and splits into light layers in 3D on a dark
+canvas, labelled down the left, with a spec
 card per layer (fills with swatches, corners, shadows, tilt, overhang, motion) and Copy prompt / Copy CSS for that
 layer alone, or Copy whole thing (hover a layer, drag to turn, Esc puts it back); say so in one line. It appears in a
 few seconds; the motion fills into the cards when it is recorded. Teach it in plain words with the exploded view; keep CSS to the

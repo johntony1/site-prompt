@@ -6,7 +6,13 @@ export function spKit() {
 	/** Every element under root that paints something, with what it paints and its effects. idxOf(el) → its number. */
 	function anatomyOf(root, idxOf, region = null) {
 	if (!root) return null;
-	const R = root.getBoundingClientRect();
+	let R = root.getBoundingClientRect();
+	// a wrapper with no size of its own (a fixed header holding the bar): its box is what its contents cover
+	if (R.width < 2 || R.height < 2) {
+		let u = null;
+		for (const e of root.querySelectorAll('*')) { const q = e.getBoundingClientRect(); if (q.width < 2 || q.height < 2) continue; u = u ? { l: Math.min(u.l, q.left), t: Math.min(u.t, q.top), r: Math.max(u.r, q.right), b: Math.max(u.b, q.bottom) } : { l: q.left, t: q.top, r: q.right, b: q.bottom }; }
+		if (u) R = { left: u.l, top: u.t, right: u.r, bottom: u.b, width: u.r - u.l, height: u.b - u.t, x: u.l, y: u.t };
+	}
 	const clear = (c) => !c || c === 'transparent' || /rgba\([^)]*,\s*0\)$/.test(c);
 	const shadows = (v) => (v && v !== 'none' ? v.split(/,(?![^(]*\))/).map((s) => s.trim()).filter((s) => !/^rgba\([^)]*,\s*0\)/.test(s)) : []);
 	const paintOf = (cs, el, pseudo) => {
@@ -91,7 +97,7 @@ export function spKit() {
 		};
 	});
 	const pad = 48;
-	return { nodes: out, rootPage: { x: R.left + scrollX, y: R.top + scrollY }, size: { w: Math.round(R.width), h: Math.round(R.height) }, clip: { x: Math.floor(lo.x) - pad + scrollX, y: Math.floor(lo.y) - pad + scrollY, width: Math.ceil(lo.r - lo.x) + pad * 2, height: Math.ceil(lo.b - lo.y) + pad * 2 } };
+	return { vis: { x: R.left, y: R.top, w: R.width, h: R.height }, nodes: out, rootPage: { x: R.left + scrollX, y: R.top + scrollY }, size: { w: Math.round(R.width), h: Math.round(R.height) }, clip: { x: Math.floor(lo.x) - pad + scrollX, y: Math.floor(lo.y) - pad + scrollY, width: Math.ceil(lo.r - lo.x) + pad * 2, height: Math.ceil(lo.b - lo.y) + pad * 2 } };
 }
 
 	const fileName = (u) => { try { return decodeURIComponent(new URL(u).pathname.split('/').pop()).replace(/-[0-9a-f]{12,}/i, '').replace(/\.\w+$/, ''); } catch { return ''; } };
@@ -101,6 +107,7 @@ export function spKit() {
 	/** A short name for a layer, from what it paints. */
 	function nameOf(n, files) {
 		const media = n.paint.find((p) => p.k === 'media');
+		if (media && media.v === 'svg' && n.box.w <= 32 && n.box.h <= 32 && !n.alt) return 'Icon';
 		if (media) {
 			const f = files.find((x) => x.src === media.v);
 			return `${n.alt || fileName(media.v) || n.tag}${f ? ` (${f.file})` : ''}`;
@@ -114,6 +121,8 @@ export function spKit() {
 			return `Outlined shapes${op}`;
 		}
 		const text = n.paint.find((p) => p.k === 'text');
+		if (text && n.tag === 'a') return `Link "${text.v.slice(0, 32)}"`;
+		if (text && (n.tag === 'button' || n.tag === 'summary')) return `Button "${text.v.slice(0, 32)}"`;
 		if (text && n.paint.some((p) => /^(fill|shadow|gradient|border)$/.test(p.k)) && n.box.w >= 60 && n.box.h >= 40) return `Card "${text.v.slice(0, 32)}"`;
 		if (text) return `Text "${text.v.slice(0, 40)}"`;
 		const pp = Object.entries(n.pseudos).filter(([, v]) => v.paint.length);

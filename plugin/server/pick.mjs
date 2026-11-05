@@ -52,6 +52,15 @@ export async function open(url, { mode = 'auto', log = () => {} } = {}) {
 	const proj = project();
 	const src = `${LOOK} ${KIT} window.__spProject = ${JSON.stringify(proj ? { name: proj.name } : null)}; (${overlay.toString()})()`;
 	await s.page.send('Page.addScriptToEvaluateOnNewDocument', { source: src });
+	// a picker from an earlier session may still be in this tab (it cannot be replaced in place: its listeners stay):
+	// reload the tab so only this one runs
+	const stale = await s.page.eval('!!window.__spOverlay || !!document.querySelector("site-prompt-ui")').catch(() => false);
+	if (stale) {
+		const loaded = s.page.once('Page.loadEventFired', 30_000).catch(() => null);
+		await s.page.send('Page.reload', { ignoreCache: false }).catch(() => {});
+		await loaded;
+		await wait(600);
+	}
 	await s.page.eval(src);
 	s.page.router?.on?.('close', () => { if (session === s) session = null; });
 	session = s;
