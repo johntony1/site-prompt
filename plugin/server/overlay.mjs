@@ -12,7 +12,7 @@ export function overlay() {
 		host.style.cssText = 'all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647';
 		const root = host.attachShadow({ mode: 'closed' });
 		root.innerHTML = `<style>${window.__spTheme || ''}</style>
-		<div class="hl"></div><div class="chip"></div><div class="marks"></div>
+		<div class="hl"></div><div class="chip"></div><div class="marks"></div><div class="drag" hidden></div><div class="abox" hidden><span></span></div>
 		<div class="hint surface"><b>Hover</b> anything you like, <b>click</b> to pick it (again to deselect), then <b>Get prompts</b></div>
 		<div class="pop surface"><span class="beam"></span>
 			<div class="head k"></div><div class="rule"></div>
@@ -22,6 +22,7 @@ export function overlay() {
 		<div class="bar surface">
 			<div class="mark">${window.__spIcons?.cursor ?? ''}</div>
 			<button class="btn on" data-a="pick" title="Pick (Esc)">${window.__spIcons?.pick ?? ''}Pick<span class="count">0</span></button>
+			<button class="btn" data-a="area" title="Drag over an area to take everything in it (A)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2.5 5V3.5a1 1 0 011-1H5M11 2.5h1.5a1 1 0 011 1V5M13.5 11v1.5a1 1 0 01-1 1H11M5 13.5H3.5a1 1 0 01-1-1V11"/></svg>Area</button>
 			<button class="btn quiet" data-a="clear" hidden title="Deselect everything">Clear</button>
 			<span class="sep"></span>
 			<div class="seg" hidden><button data-s="exact" title="Pixel for pixel, as it is on this site">Exact</button><button data-s="mine" title="Same layout and motion, in your site's fonts, colours and radius">My style</button></div>
@@ -63,7 +64,7 @@ export function overlay() {
 			if (r.width >= innerWidth * 0.75 && r.height >= 220) return 'section';
 			return 'component';
 		};
-		const NAME = { illustration: 'Illustration', button: 'Button', text: 'Text', section: 'Section', component: 'Component' };
+		const NAME = { illustration: 'Illustration', button: 'Button', text: 'Text', section: 'Section', component: 'Component', area: 'Area' };
 		const describe = (el) => {
 			const r = el.getBoundingClientRect(), k = kindOf(el), cs = getComputedStyle(el);
 			const extra = k === 'text' ? `${cs.fontFamily.split(',')[0].replace(/["']/g, '')} ${Math.round(parseFloat(cs.fontSize))}px ${cs.fontWeight}` : `${Math.round(r.width)}×${Math.round(r.height)}`;
@@ -117,7 +118,8 @@ export function overlay() {
 				const on = document.contains(p.el);
 				m.ring.style.display = m.badge.style.display = on ? '' : 'none';
 				if (!on) continue;
-				const r = p.el.getBoundingClientRect();
+				const b0 = p.el.getBoundingClientRect();
+				const r = p.area ? { left: b0.left + p.area.x, top: b0.top + p.area.y, width: p.area.w, height: p.area.h } : b0;
 				Object.assign(m.ring.style, { left: r.left - 3 + 'px', top: r.top - 3 + 'px', width: r.width + 6 + 'px', height: r.height + 6 + 'px' });
 				Object.assign(m.badge.style, { left: Math.max(4, r.left - 10) + 'px', top: Math.max(4, r.top - 10) + 'px' });
 			}
@@ -153,6 +155,39 @@ export function overlay() {
 		const closePop = () => { if (open) open.note = note.value.trim(); open = null; pop.style.display = 'none'; };
 		const setPicking = (v) => { picking = v; pickBtn.classList.toggle('on', v); if (!v) { cur = null; show(); } };
 
+		// Area: drag a rectangle; the pick is the smallest element that holds it, cut to the rectangle
+		const dragLayer = $('.drag'), abox = $('.abox'), areaBtn = $('[data-a=area]');
+		let areaMode = false, a0 = null;
+		const setArea = (v) => { areaMode = v; areaBtn.classList.toggle('on', v); pickBtn.classList.toggle('on', !v && picking); dragLayer.hidden = !v; if (v) { cur = null; show(); } };
+		const holder = (r) => {
+			let el = document.elementsFromPoint(r.x + r.w / 2, r.y + r.h / 2).map(target).find((x) => x !== host && !seeThrough(x)) ?? document.body;
+			for (; el && el !== document.body; el = el.parentElement) { const b = el.getBoundingClientRect(); if (b.left <= r.x + 2 && b.top <= r.y + 2 && b.right >= r.x + r.w - 2 && b.bottom >= r.y + r.h - 2) return el; }
+			return document.body;
+		};
+		dragLayer.addEventListener('pointerdown', (e) => { a0 = { x: e.clientX, y: e.clientY }; dragLayer.setPointerCapture(e.pointerId); abox.hidden = false; Object.assign(abox.style, { left: a0.x + 'px', top: a0.y + 'px', width: '0px', height: '0px' }); });
+		dragLayer.addEventListener('pointermove', (e) => {
+			if (!a0) return;
+			const x = Math.min(a0.x, e.clientX), y = Math.min(a0.y, e.clientY), w = Math.abs(e.clientX - a0.x), h = Math.abs(e.clientY - a0.y);
+			Object.assign(abox.style, { left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px' });
+			abox.querySelector('span').textContent = `${Math.round(w)} × ${Math.round(h)}`;
+		});
+		dragLayer.addEventListener('pointerup', (e) => {
+			if (!a0) return;
+			const r = { x: Math.min(a0.x, e.clientX), y: Math.min(a0.y, e.clientY), w: Math.abs(e.clientX - a0.x), h: Math.abs(e.clientY - a0.y) };
+			a0 = null; abox.hidden = true;
+			if (r.w < 12 || r.h < 12) return;
+			const el = holder(r), b = el.getBoundingClientRect();
+			const area = { x: Math.round(r.x - b.left), y: Math.round(r.y - b.top), w: Math.round(r.w), h: Math.round(r.h) };
+			const p = { n: ++n, el, kind: 'area', area, label: `Area · ${area.w}×${area.h}`, note: '' };
+			store.set('__spN', String(n));
+			el.setAttribute('data-sp-pick', String(p.n));
+			picks.push(p);
+			hint.style.opacity = '0';
+			status.hidden = true;
+			setArea(false);
+			redraw();
+			openPop(p);
+		});
 		const block = (e) => { if (window.__spViewerOpen) return; if (picking && !ours(e)) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); } };
 		for (const t of ['mousedown', 'mouseup', 'pointerdown', 'pointerup', 'dblclick', 'contextmenu', 'auxclick']) addEventListener(t, block, true);
 		addEventListener('mousemove', (e) => {
@@ -181,7 +216,8 @@ export function overlay() {
 		addEventListener('keydown', (e) => {
 			if (window.__spViewerOpen) return;
 			if (open && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send('send'); return; }
-			if (e.key === 'Escape') { e.preventDefault(); if (open) closePop(); else setPicking(!picking); return; }
+			if (e.key === 'Escape') { e.preventDefault(); if (open) closePop(); else if (areaMode) setArea(false); else setPicking(!picking); return; }
+			if ((e.key === 'a' || e.key === 'A') && !open && !e.metaKey && !e.ctrlKey && !/^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName ?? '')) { e.preventDefault(); setArea(!areaMode); return; }
 			if (picking && !open && e.key === 'ArrowUp' && cur?.parentElement && cur.parentElement !== document.body) { e.preventDefault(); down.push(cur); cur = cur.parentElement; show(); }
 			if (picking && !open && e.key === 'ArrowDown' && down.length) { e.preventDefault(); cur = down.pop(); show(); }
 		}, true);
@@ -190,8 +226,8 @@ export function overlay() {
 			if (!picks.length) return;
 			// Break it down: taken apart right here, at once, from what is on screen; the agent builds the lesson after
 			let inst = null;
-			if (a === 'learn') { const p0 = picks.find((p) => document.contains(p.el)); try { inst = p0 && await window.__spInstant?.(p0.el, `${NAME[p0.kind]}, ${location.host.replace(/^www\./, '')}`); if (inst) inst.n = p0.n; } catch (e) { inst = null; } }
-			const batch = picks.filter((p) => document.contains(p.el)).map((p) => ({ n: p.n, kind: p.kind, label: p.label, note: p.note }));
+			if (a === 'learn') { const p0 = picks.find((p) => document.contains(p.el)); try { inst = p0 && await window.__spInstant?.(p0.el, `${p0.kind === 'area' ? 'Area' : NAME[p0.kind]}, ${location.host.replace(/^www\./, '')}`, p0.area); if (inst) inst.n = p0.n; } catch (e) { inst = null; } }
+			const batch = picks.filter((p) => document.contains(p.el)).map((p) => ({ n: p.n, kind: p.kind, label: p.label, note: p.note, area: p.area }));
 			picks.length = 0;
 			redraw();
 			status.textContent = a === 'add' ? `Sent ${batch.length}. Adding to ${proj?.name ?? 'your project'}…` : a === 'learn' ? `Taking ${batch.length > 1 ? 'them' : 'it'} apart…` : `Sent ${batch.length}. Writing the prompt${batch.length > 1 ? 's' : ''}…`;
@@ -206,7 +242,8 @@ export function overlay() {
 				const sb = e.target.closest('[data-s]');
 				if (sb) return setStyle(sb.dataset.s);
 				const a = e.target.closest('[data-a]')?.getAttribute('data-a');
-			if (a === 'pick') setPicking(!picking);
+			if (a === 'pick') { setArea(false); setPicking(!picking); }
+				if (a === 'area') { closePop(); setArea(!areaMode); }
 			if (a === 'remove' && open) unpick(open);
 				if (a === 'clear') { for (const p of [...picks]) unpick(p); status.hidden = true; }
 			if (a === 'send' || a === 'add' || a === 'learn') send(a);

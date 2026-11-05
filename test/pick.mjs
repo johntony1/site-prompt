@@ -195,6 +195,25 @@ try {
 	await hsend('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }, sid);
 	await sleep(1500);
 	check(!(await ev('!!document.querySelector("site-prompt-view")')) && await ev('getComputedStyle(document.querySelector(".cta")).visibility') === 'visible', 'Esc puts it back (the element is visible again)');
+	// 3d. Area: drag a rectangle around the button and the headline, then break it down
+	const areaCall = call('site_pick', { wait: 120 });
+	await sleep(200);
+	await click(await ui('[data-a=area]'));
+	const hb = await ev(`(() => { const a = document.querySelector('h1').getBoundingClientRect(), b = document.querySelector('.cta').getBoundingClientRect(); return { x0: Math.min(a.left, b.left) - 6, y0: a.top - 6, x1: Math.max(a.right, b.right) + 6, y1: b.bottom + 6 }; })()`);
+	await hsend('Input.dispatchMouseEvent', { type: 'mousePressed', x: hb.x0, y: hb.y0, button: 'left', clickCount: 1 }, sid);
+	for (let k = 1; k <= 8; k++) await hsend('Input.dispatchMouseEvent', { type: 'mouseMoved', x: hb.x0 + (hb.x1 - hb.x0) * k / 8, y: hb.y0 + (hb.y1 - hb.y0) * k / 8, button: 'left', buttons: 1 }, sid);
+	await hsend('Input.dispatchMouseEvent', { type: 'mouseReleased', x: hb.x1, y: hb.y1, button: 'left', clickCount: 1 }, sid);
+	await sleep(300);
+	check(await ev('document.querySelectorAll("[data-sp-pick]").length') === 1, 'Area: dragging a rectangle makes one pick');
+	await click(await ui('.pop [data-a=learn]'));
+	const areaRes = await areaCall;
+	for (let k = 0; k < 50 && !(await ev('!!document.querySelector("site-prompt-view")')); k++) await sleep(100);
+	const areaLayers = await ev(`(() => { const r = document.querySelector('site-prompt-view'); return r ? [...r.shadowRoot.querySelectorAll('.label')].map((l) => l.textContent.replace(/^\\d+\\s*/, '')) : null; })()`);
+	check(areaLayers && areaLayers.some((l) => /halo keeps/i.test(l)) && areaLayers.some((l) => /try halo/i.test(l)) && !areaLayers.some((l) => /svg|illustration/i.test(l)), 'Break it down on the area: the headline and the button, not the drawing outside it', areaLayers);
+	check(/BREAK IT DOWN/.test(areaRes.words), 'and the lesson comes back for the area');
+	await hsend('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }, sid);
+	await sleep(1500);
+	console.log('      after area:', await ev(`JSON.stringify({ view: !!document.querySelector('site-prompt-view'), open: window.__spViewerOpen, picked: document.querySelectorAll('[data-sp-pick]').length, cur: window.__spTest.cur() })`));
 	// 4. building: the toolbar offers Add to my-launch; the agent is told to build it into the project
 	check(await ev(`(() => { const r = window.__spTest.rect('.bar [data-a=add]'); return r.x > 0; })()`), 'the toolbar offers Add to the project');
 	check(await ev(`(() => { const r = window.__spTest.rect('.seg'); return r.x > 0; })()`), 'the toolbar offers Exact | My style');

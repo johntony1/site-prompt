@@ -18,6 +18,10 @@ export const THEME = String.raw`
 .badge{appearance:none;border:0;padding:0;cursor:pointer;font-family:inherit;transition:transform 120ms cubic-bezier(.2,0,0,1);position:fixed;pointer-events:auto;width:20px;height:20px;border-radius:6px;background:var(--accent2);color:#fff;font-size:11px;font-weight:650;display:grid;place-items:center;font-variant-numeric:tabular-nums;box-shadow:0 0 0 1.5px var(--bg),0 4px 10px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.2)}
 
 .badge:hover{transform:scale(1.12)}
+/* the Area tool: a crosshair layer, and the box being drawn (the rest of the page dims) */
+.drag{position:fixed;inset:0;pointer-events:auto;cursor:crosshair}
+.abox{position:fixed;pointer-events:none;border:1px solid var(--accent);border-radius:4px;box-shadow:0 0 0 100vmax rgba(9,9,11,.35),0 0 0 3px rgba(61,123,255,.18)}
+.abox span{position:absolute;right:0;top:calc(100% + 6px);padding:3px 6px;border-radius:5px;background:var(--panel);color:var(--text2);font:500 11px/1 ui-monospace,Menlo,monospace;box-shadow:0 0 0 1px var(--line2)}
 /* surfaces */
 .surface{position:fixed;pointer-events:auto;background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0) 40%),var(--panel);border:1px solid var(--line);color:var(--text);box-shadow:0 0 0 1px rgba(0,0,0,.55),0 1px 0 rgba(255,255,255,.04) inset,0 24px 48px -12px rgba(0,0,0,.6),0 8px 16px -8px rgba(0,0,0,.4)}
 

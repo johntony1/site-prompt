@@ -4,7 +4,7 @@
 
 export function spKit() {
 	/** Every element under root that paints something, with what it paints and its effects. idxOf(el) → its number. */
-	function anatomyOf(root, idxOf) {
+	function anatomyOf(root, idxOf, region = null) {
 	if (!root) return null;
 	const R = root.getBoundingClientRect();
 	const clear = (c) => !c || c === 'transparent' || /rgba\([^)]*,\s*0\)$/.test(c);
@@ -22,6 +22,12 @@ export function spKit() {
 			if (own) p.push({ k: 'text', v: own.slice(0, 80) });
 			const t = el.tagName.toLowerCase();
 			if (/^(img|svg|video|canvas|picture)$/.test(t)) p.push({ k: 'media', v: t === 'img' ? el.currentSrc || el.src : t });
+			// the shapes inside a drawing paint with fill and stroke
+			if (el.namespaceURI === 'http://www.w3.org/2000/svg' && /^(path|line|polyline|polygon|circle|ellipse|rect|text|use|image)$/.test(t)) {
+				if (cs.stroke !== 'none' && !clear(cs.stroke) && parseFloat(cs.strokeWidth) > 0 && parseFloat(cs.strokeOpacity ?? 1) > 0) p.push({ k: 'stroke', v: `${cs.strokeWidth} ${cs.stroke}${cs.strokeDasharray !== 'none' ? `, dashed ${cs.strokeDasharray}` : ''}` });
+				if (cs.fill !== 'none' && !clear(cs.fill) && parseFloat(cs.fillOpacity ?? 1) > 0 && t !== 'line') p.push({ k: 'vfill', v: cs.fill });
+				if (t === 'text' && el.textContent.trim()) p.push({ k: 'text', v: el.textContent.trim().slice(0, 80) });
+			}
 		}
 		if (cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0) p.push({ k: 'outline', v: `${cs.outlineWidth} ${cs.outlineStyle} ${cs.outlineColor}` });
 		return p;
@@ -70,10 +76,10 @@ export function spKit() {
 		let depth = 0;
 		for (let x = el; x !== root; x = x.parentElement) depth++;
 		return {
-			i, p: index.get(el.parentElement) ?? null, tag: el.tagName.toLowerCase(), depth, alt: el.getAttribute('alt') || '',
+			i, p: index.get(el.parentElement) ?? null, tag: el.tagName.toLowerCase(), depth, alt: el.getAttribute('alt') || el.getAttribute('aria-label') || '',
 			box: (() => {
 				// what can be seen of it: cut by every frame above it that clips (and by the pick itself when it clips)
-				const c = el === root ? (rootClips ? { x0: 0, y0: 0, x1: R.width, y1: R.height } : { x0: -1e6, y0: -1e6, x1: 1e6, y1: 1e6 }) : (clipOf.get(el.parentElement) ?? { x0: -1e6, y0: -1e6, x1: 1e6, y1: 1e6 });
+				const c = el === root ? (region ? { x0: region.x, y0: region.y, x1: region.x + region.w, y1: region.y + region.h } : rootClips ? { x0: 0, y0: 0, x1: R.width, y1: R.height } : { x0: -1e6, y0: -1e6, x1: 1e6, y1: 1e6 }) : (clipOf.get(el.parentElement) ?? { x0: -1e6, y0: -1e6, x1: 1e6, y1: 1e6 });
 				const own = { x0: r.left - R.left, y0: r.top - R.top, x1: r.right - R.left, y1: r.bottom - R.top };
 				clipOf.set(el, cs.overflow !== 'visible' || cs.overflowX !== 'visible' ? { x0: Math.max(c.x0, own.x0), y0: Math.max(c.y0, own.y0), x1: Math.min(c.x1, own.x1), y1: Math.min(c.y1, own.y1) } : c);
 				const x0 = Math.max(c.x0, own.x0), y0 = Math.max(c.y0, own.y0), x1 = Math.min(c.x1, own.x1), y1 = Math.min(c.y1, own.y1);
@@ -194,6 +200,34 @@ export function spKit() {
 			const sub = g.members.some((m) => m !== g.n);
 			return { i: g.n.i, sub, n: g.n, members: g.members.map((m) => m.i), box: { x: box.x, y: box.y, w: box.r - box.x, h: box.b - box.y }, name: g.name ?? (sub ? groupName(g, files) : nameOf(g.n, files)) };
 		});
+		const svgRoot = nodes[0].tag === 'svg' ? nodes[0] : (() => { const k = kids.get(nodes[0].i) ?? []; return k.length === 1 && k[0].tag === 'svg' ? k[0] : null; })();
+		if (svgRoot && P.length > max) {
+			const inside2 = (x) => [x, ...under(x)].filter((m) => P.includes(m));
+			let parts = (kids.get(svgRoot.i) ?? []).filter((c) => inside2(c).length);
+			for (let k = 0; k < 3 && parts.length === 1; k++) { const inner = (kids.get(parts[0].i) ?? []).filter((c) => inside2(c).length); if (inner.length < 2) break; parts = inner; }
+			const gs = [];
+			if (P.includes(nodes[0]) && nodes[0] !== svgRoot) gs.push({ n: nodes[0], members: [nodes[0]], name: 'Panel' });
+			// one layer per group of the drawing when it has a few; otherwise its parts sorted by what they are
+			if (parts.length >= 2 && parts.length <= max - gs.length) for (const x of parts) gs.push({ n: x, members: inside2(x), name: drawingName(x, inside2(x)) });
+			else {
+				const mem = inside2(svgRoot).filter((m) => m !== svgRoot);
+				const kindOf = (m) => {
+					const has = (k) => m.paint.some((q) => q.k === k);
+					if (has('text')) return 'Text';
+					if (m.anim) return has('stroke') ? 'Animated pulses' : 'Animated shapes';
+					if (has('stroke') && m.paint.some((q) => q.k === 'stroke' && /dashed/.test(q.v))) return 'Dashed lines';
+					if (has('stroke') && !has('vfill')) return 'Lines';
+					if (m.tag === 'circle' || m.tag === 'ellipse') return 'Circles';
+					if (has('media')) return 'Images';
+					return 'Shapes';
+				};
+				const kinds = new Map();
+				for (const m of mem) { const k = kindOf(m); (kinds.get(k) ?? kinds.set(k, []).get(k)).push(m); }
+				const ORDER = ['Circles', 'Shapes', 'Images', 'Dashed lines', 'Lines', 'Animated shapes', 'Animated pulses', 'Text'];
+				for (const k of ORDER) if (kinds.has(k)) gs.push({ n: kinds.get(k)[0], members: kinds.get(k), name: `${k} (${kinds.get(k).length})` });
+			}
+			return finish(gs, true);
+		}
 		// a small pick: every part is its own layer
 		if (P.length <= max) return finish(P.map((n) => ({ n, members: [n] })));
 		// a big one: its visual pieces (a panel, a card, a picture), each with everything it holds, the biggest first
@@ -259,6 +293,16 @@ export function spKit() {
 		const loose = P.filter((m) => !claimed.has(m));
 		if (loose.length) groups.splice(others.length ? 2 : 1, 0, { n: loose[0], members: loose });
 		return finish(groups.slice(0, max), true);
+	}
+	function drawingName(x, mem) {
+		const label = x.alt || '';
+		if (label) return label;
+		const strokes = mem.filter((m) => m.paint.some((q) => q.k === 'stroke')), fills = mem.filter((m) => m.paint.some((q) => q.k === 'vfill')), texts = mem.filter((m) => m.paint.some((q) => q.k === 'text'));
+		const dashed = strokes.some((m) => m.paint.some((q) => q.k === 'stroke' && /dashed/.test(q.v)));
+		if (texts.length) return `Text "${texts[0].paint.find((q) => q.k === 'text').v.slice(0, 24)}"`;
+		if (strokes.length && !fills.length) return `${dashed ? 'Dashed lines' : 'Lines'} (${strokes.length})`;
+		if (fills.length && !strokes.length) return `${x.tag === 'circle' || mem.every((m) => m.tag === 'circle') ? 'Circles' : 'Shapes'} (${fills.length})`;
+		return `Drawing group (${mem.length})`;
 	}
 	function groupName(g, files) {
 		const media = g.members.filter((m) => m.paint.some((p) => p.k === 'media'));

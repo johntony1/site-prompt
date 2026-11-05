@@ -44,8 +44,13 @@ export function viewer() {
 		.plane .tag{position:absolute;left:10px;top:10px;height:20px;padding:0 7px;border-radius:6px;background:#fff;color:#71717a;font:600 10.5px/20px var(--mono);box-shadow:0 0 0 1px #d4d4d8;opacity:0;transform:translateZ(1px);transition:opacity .3s ease}
 		.on .plane .tag{opacity:1}
 		.pin{position:absolute;width:1px;height:1px}
+		.slab .q{position:absolute;width:1px;height:1px}
+		.slab .q:nth-child(1){left:0;top:0}.slab .q:nth-child(2){right:0;top:0}.slab .q:nth-child(3){right:0;bottom:0}.slab .q:nth-child(4){left:0;bottom:0}
 		.pin.l{left:0;top:50%}.pin.r{right:0;top:50%}
-				.plane.hot .slab{box-shadow:0 0 0 1.5px var(--blue2),0 0 0 6px rgba(61,123,255,.12)}
+				.v.kept .plane{opacity:.16;filter:saturate(.4)}
+		.v.kept .plane.hot{opacity:1;filter:none}
+		.v.kept .label:not(.kept){color:var(--faint)}
+		.plane.hot .slab{box-shadow:0 0 0 1.5px var(--blue2),0 0 0 6px rgba(61,123,255,.12)}
 		.plane.hot .edge{background:#9db8fb;box-shadow:0 0 0 1.5px var(--blue2),0 26px 40px -24px rgba(43,100,248,.35)}
 		.plane.hot .tag{background:var(--blue);color:#fff;box-shadow:none}
 		.head{position:fixed;left:32px;top:28px;opacity:0;transform:translateY(-6px);transition:opacity .4s ease .25s,transform .5s cubic-bezier(.2,.8,.2,1) .25s}
@@ -131,7 +136,7 @@ export function viewer() {
 	</style>
 	<div class="v" style="${slabVars(V.bg)}">
 		<div class="canvas"></div>
-		<div class="stage"><div class="stack">${V.layers.map((l, k) => `<div class="plane" data-k="${k}"><div class="edge"></div><div class="slab"></div>${V.html ? `<div class="copy p${k}">${V.html}</div>` : l.png ? `<img src="data:image/png;base64,${l.png}">` : ''}<span class="tag">${pad2(l.n)}</span><i class="pin l"></i><i class="pin r"></i></div>`).join('')}</div></div>
+		<div class="stage"><div class="stack">${V.layers.map((l, k) => `<div class="plane" data-k="${k}"><div class="edge"></div><div class="slab"><i class="q"></i><i class="q"></i><i class="q"></i><i class="q"></i></div>${V.html ? `<div class="copy p${k}">${V.html}</div>` : l.png ? `<img src="data:image/png;base64,${l.png}">` : ''}<span class="tag">${pad2(l.n)}</span><i class="pin l"></i><i class="pin r"></i></div>`).join('')}</div></div>
 		<svg class="lines"><path class="lab" d=""/><circle class="lab" r="3" cx="-9" cy="-9"/><path class="card" d=""/><circle class="card" r="3" cx="-9" cy="-9"/></svg>
 		<div class="head"><small>Breakdown</small><h2>${esc(V.title)}</h2><p>${n} layers · hover one to inspect · drag to turn</p><div class="was"><span>You picked</span><div class="thumb"><div class="tin">${V.html ? `<div class="whole">${V.html}</div>` : V.layers.map((l) => (l.png ? `<img src="data:image/png;base64,${l.png}">` : '')).join('')}</div></div></div></div>
 		<div class="labels">${V.layers.slice().reverse().map((l) => `<div class="label" data-k="${l.n - 1}"><b>${pad2(l.n)}</b>${esc(l.name.replace(/ \(layer-\d+\.\w+\)/, ''))}</div>`).join('')}</div>
@@ -226,6 +231,7 @@ export function viewer() {
 			setTimeout(() => { planes.forEach((p) => (p.style.transitionDelay = '')); setHot(n - 1); }, 1000 + n * 40);
 		}));
 	});
+	const MIRROR = ['transform', 'opacity', 'filter', 'translate', 'scale', 'rotate', 'stroke-dashoffset', 'stroke-dasharray', 'stroke', 'fill', 'stroke-opacity', 'fill-opacity', 'clip-path', 'offset-distance', 'background-position', 'width', 'height', 'd'];
 	// what moves on the page moves here: mirrored from the real element every frame
 	const mirrors = (V.mirror ?? []).map((m) => ({ el: m.el, copies: [...root.querySelectorAll(`.c${m.i}`)] })).filter((m) => m.copies.length);
 	if (mirrors.length) {
@@ -233,7 +239,7 @@ export function viewer() {
 			if (!host.isConnected) return;
 			for (const m of mirrors) {
 				const cs = getComputedStyle(m.el);
-				for (const c of m.copies) { c.style.transform = cs.transform; c.style.opacity = cs.opacity; c.style.filter = cs.filter; c.style.translate = cs.translate; c.style.scale = cs.scale; c.style.rotate = cs.rotate; }
+				for (const c of m.copies) for (const p of MIRROR) c.style.setProperty(p, cs.getPropertyValue(p));
 			}
 			requestAnimationFrame(step);
 		};
@@ -241,10 +247,10 @@ export function viewer() {
 	}
 	// the preview: the whole pick, scaled into 220 px
 	{
-		const thumb = $('.thumb'), tin = $('.tin'), W = V.html ? V.size.w : V.clip.w, H = V.html ? V.size.h : V.clip.h, k = Math.min(220 / W, 150 / H);
+		const A = V.area, thumb = $('.thumb'), tin = $('.tin'), W0 = V.html ? V.size.w : V.clip.w, H0 = V.html ? V.size.h : V.clip.h, W = A ? A.w : W0, H = A ? A.h : H0, k = Math.min(220 / W, 150 / H);
 		Object.assign(thumb.style, { width: Math.round(W * k) + 'px', height: Math.round(H * k) + 'px' });
-		Object.assign(tin.style, { width: W + 'px', height: H + 'px', transform: `scale(${k})` });
-		tin.querySelectorAll(':scope > img').forEach((im) => Object.assign(im.style, { width: W + 'px', height: H + 'px' }));
+		Object.assign(tin.style, { width: W0 + 'px', height: H0 + 'px', transform: `scale(${k}) translate(${A ? -A.x : 0}px, ${A ? -A.y : 0}px)` });
+		tin.querySelectorAll(':scope > img').forEach((im) => Object.assign(im.style, { width: W0 + 'px', height: H0 + 'px' }));
 	}
 	// the labels: a column on the left, centred
 	const h0 = labelsBox.getBoundingClientRect().height;
@@ -307,15 +313,20 @@ export function viewer() {
 		const h = card.getBoundingClientRect().height || 320;
 		card.style.top = Math.max(24, Math.min(innerHeight - h - 90, pr.top - h / 2)) + 'px';
 	};
-	labels.forEach((x) => { x.addEventListener('mouseenter', () => { if (pinned == null) setHot(+x.dataset.k); }); x.addEventListener('click', () => { pinned = +x.dataset.k; labels.forEach((y) => y.classList.toggle('kept', y === x)); setHot(pinned); }); });
+	labels.forEach((x) => { x.addEventListener('mouseenter', () => { if (pinned == null) setHot(+x.dataset.k); }); x.addEventListener('click', () => keep(pinned === +x.dataset.k ? null : +x.dataset.k)); });
 	// over the stack: the top-most plane under the pointer (a projected plane is a quad: test inside its corners)
 	const inside = (q, x, y) => { let s = 0; for (let i = 0; i < 4; i++) { const a = q[i], b = q[(i + 1) % 4]; const c = (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]); if (c !== 0) { if (s && Math.sign(c) !== s) return false; s = Math.sign(c); } } return true; };
-	const corners = (p) => {
-		const m = new DOMMatrix(getComputedStyle(stack).transform).multiply(new DOMMatrix(getComputedStyle(p).transform));
-		const W = V.clip.w, H = V.clip.h, b = stage.getBoundingClientRect(), ox = V.offset.x + W / 2, oy = V.offset.y + H / 2, P = 2800;
-		return [[0, 0], [W, 0], [W, H], [0, H]].map(([x, y]) => { const pt = m.transformPoint(new DOMPoint(x - W / 2, y - H / 2, 0)); const ex = pt.x + ox, ey = pt.y + oy; const cxs = b.width / 2, cys = b.height / 2; const f = P / (P - pt.z); return [b.left + cxs + (ex - cxs) * f, b.top + cys + (ey - cys) * f]; });
-	};
+	const corners = (p) => [...p.querySelectorAll('.slab .q')].map((q) => { const r = q.getBoundingClientRect(); return [r.left, r.top]; });
+
 	let pinned = null;
+	// keep one layer in focus (click it or its label), or let go (click empty space, or it again)
+	const keep = (k) => {
+		pinned = k;
+		v.classList.toggle('kept', k != null);
+		labels.forEach((x) => x.classList.toggle('kept', +x.dataset.k === k));
+		if (k != null) setHot(k);
+		apply();
+	};
 	canvas.addEventListener('mousemove', (e) => {
 		if (drag || pinned != null) return;
 		for (let k = planes.length - 1; k >= 0; k--) if (inside(corners(planes[k]), e.clientX, e.clientY)) { setHot(k); return; }
@@ -330,9 +341,7 @@ export function viewer() {
 		// a click: keep the layer under the pointer, or let go on empty space
 		let k = null;
 		for (let j = planes.length - 1; j >= 0; j--) if (inside(corners(planes[j]), e.clientX, e.clientY)) { k = j; break; }
-		pinned = k;
-		labels.forEach((x) => x.classList.toggle('kept', +x.dataset.k === k));
-		if (k != null) setHot(k);
+		keep(k);
 	});
 	const ANGLES = { top: { ry: 0, rx: 55, rz: -40 }, front: { ry: -38, rx: 8, rz: 0 } };
 	const views = [...root.querySelectorAll('.vb')];
@@ -386,7 +395,7 @@ export function viewer() {
  * In the page, the moment Break it down is pressed: the pick exactly as it is on screen now (read-only), grouped into
  * layers, and the view opened on it. Returns what the server needs to build the lesson from the same picture.
  */
-export async function instant(el, title) {
+export async function instant(el, title, area = null) {
 	const K = window.__spKit;
 	if (!K || !window.__spSnap || !el) return null;
 	el.setAttribute('data-sp-picked', '1');
@@ -394,9 +403,9 @@ export async function instant(el, title) {
 	try { snap = window.__spSnap('[data-sp-picked]'); } finally { el.removeAttribute('data-sp-picked'); }
 	if (!snap) return null;
 	const live = new Map([el, ...el.querySelectorAll('[data-sp-n]')].map((e) => [+e.getAttribute('data-sp-n'), e]));
-	const a = K.anatomyOf(el, (e) => { const v = e.getAttribute('data-sp-n'); return v == null ? null : +v; });
+	const a = K.anatomyOf(el, (e) => { const v = e.getAttribute('data-sp-n'); return v == null ? null : +v; }, area);
 	// what is moving right now, whatever moves it (CSS, Web Animations, a script): two frames apart, what changed
-	const look = (e) => { const c = getComputedStyle(e); return `${c.transform}|${c.opacity}|${c.filter}|${c.clipPath}|${c.translate}|${c.scale}|${c.rotate}`; };
+	const look = (e) => { const c = getComputedStyle(e); return `${c.transform}|${c.opacity}|${c.filter}|${c.clipPath}|${c.translate}|${c.scale}|${c.rotate}|${c.strokeDashoffset}|${c.strokeDasharray}|${c.stroke}|${c.fill}|${c.offsetDistance}|${c.backgroundPosition}|${c.getPropertyValue('d')}`; };
 	const before = new Map([...live].map(([i, e]) => [i, look(e)]));
 	await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 30))));
 	const moving = new Set();
@@ -425,8 +434,12 @@ export async function instant(el, title) {
 			if (!hits) covered.add(n.i);
 		}
 	} finally { pe.remove(); }
-	const seenNodes = a.nodes.map((n) => (covered.has(n.i) ? { ...n, paint: [], pseudos: {} } : n));
-	let groups = K.groupLayers(seenNodes, [], 12, movingTop);
+	const seenNodes = a.nodes.map((n) => (covered.has(n.i) ? { ...n, paint: [], pseudos: {} } : moving.has(n.i) ? { ...n, anim: true } : n));
+	// motion as background (a few floating parts) gets its own layer; motion that IS the drawing (most of it moves, or
+	// it is an svg) stays in its groups and plays there: the mirror animates every copy wherever it sits
+	const paintingCount = a.nodes.filter((n) => n.paint.length || Object.values(n.pseudos).some((v) => v.paint.length)).length || 1;
+	const motionIsTheThing = el.tagName.toLowerCase() === 'svg' || el.querySelector(':scope > svg') && el.children.length === 1 || moving.size / paintingCount > 0.4;
+	let groups = K.groupLayers(seenNodes, [], 12, motionIsTheThing ? null : movingTop);
 	// background motion sits low in the stack, just above the panel
 	const mv = groups.find((g) => g.moving);
 	if (mv) { groups = groups.filter((g) => g !== mv); groups.splice(groups[0]?.name === 'Panel' ? 1 : 0, 0, mv); }
@@ -572,7 +585,7 @@ export async function instant(el, title) {
 	}));
 	// the view mirrors the moving parts from the page every frame (the page keeps animating underneath)
 	const mirror = [...moving].map((i) => ({ i, el: live.get(i) })).filter((m) => m.el);
-	const V = { el, title, mirror, html: snap.html, rules: snap.rules, bg, size: { w: r.width, h: r.height }, offset: { x: 0, y: 0 }, clip: { w: r.width, h: r.height }, layers };
+	const V = { el, title, area, mirror, html: snap.html, rules: snap.rules, bg, size: { w: r.width, h: r.height }, offset: { x: 0, y: 0 }, clip: { w: r.width, h: r.height }, layers };
 	window.__spView = V;
 	window.__spViewer();
 	return { html: snap.html, rules: snap.rules, fonts: [...new Set(fonts)], bg, size: V.size, why, layers: layers.map(({ specs, type, layout, holds, why: w, design, eng, authored, ...l }) => ({ ...l, authored })) };

@@ -244,6 +244,7 @@ export function pickPrompt({ pick, d, r, url, asset, dir }) {
 	L.push(`# Build this ${kind} from ${host}, exactly`);
 	L.push('');
 	if (pick.note) { L.push(`**What I want from it:** ${pick.note}`); L.push(''); }
+	if (pick.area) { L.push(`**Only the area I drew:** ${pick.area.w}×${pick.area.h} px, starting ${pick.area.x} px from its left and ${pick.area.y} px from its top. Build what is inside that area; the rest of the code below is the context it sits in.`); L.push(''); }
 	L.push(`It is a ${size} ${kind} on ${url}${d.text && pick.kind !== 'section' ? ` ("${d.text.split('\n')[0].slice(0, 80)}")` : ''}. Build it so it looks exactly the same: same size, spacing, type, colours, radius, shadows, states and motion, nothing moved, nothing restyled.`);
 	L.push('');
 	L.push(`The code below is its exact markup and every style the browser computed for it on the live page. On its own it renders like the original${r.diff == null ? '' : ` (checked against a screenshot: ${(r.diff * 100).toFixed(1)}% pixel difference)`}. Keep every value as given. Rename the positional classes (c0, c1…) to meaningful ones and write it in this project's stack (React + Tailwind if there is none), without changing how it looks.`);
