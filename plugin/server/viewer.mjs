@@ -597,7 +597,14 @@ export function viewer() {
  * In the page, the moment Break it down is pressed: the pick exactly as it is on screen now (read-only), grouped into
  * layers, and the view opened on it. Returns what the server needs to build the lesson from the same picture.
  */
-export async function instant(el, title, area = null, show = true) {
+export async function instant(el, title, area = null, show = true, pre = null) {
+	// taken when they clicked (a menu open on hover, a state that has gone since): show that, not what is there now
+	if (pre && show) {
+		const V = { ...pre, el: null, title, area, mirror: pre.mirror ?? [], width: pre.width };
+		window.__spView = V;
+		window.__spViewer();
+		return { html: pre.html, rules: pre.rules, fonts: pre.fonts ?? [], bg: pre.bg, size: pre.size, why: pre.why ?? {}, fromClick: true, layers: pre.layers.map(({ specs, type, layout, holds, why: w, design, eng, authored, ...l }) => ({ ...l, authored })) };
+	}
 	const K = window.__spKit;
 	if (!K || !window.__spSnap || !el) return null;
 	el.setAttribute('data-sp-picked', '1');
@@ -807,7 +814,11 @@ export async function instant(el, title, area = null, show = true) {
 	const mirror = [...moving].map((i) => ({ i, el: live.get(i) })).filter((m) => m.el);
 	const V = { el, title, area, mirror, html: snap.html, rules: snap.rules, bg, rootW: Math.round(r0.width * 100) / 100, size: { w: r.width, h: r.height }, offset: visOff, clip: { w: r.width, h: r.height }, layers };
 	// at another width (the server lays it out there): the view's data only, nothing shown
-	if (!show) return { title, html: snap.html, rules: snap.rules, bg, rootW: V.rootW, size: V.size, offset: V.offset, clip: V.clip, layers, width: innerWidth };
+	if (!show) {
+		const out = { title, html: snap.html, rules: snap.rules, fonts: [...new Set(fonts)], why, bg, rootW: V.rootW, size: V.size, offset: V.offset, clip: V.clip, layers, width: innerWidth };
+		Object.defineProperty(out, 'mirror', { value: mirror, enumerable: false }); // live elements: kept in the page, never sent
+		return out;
+	}
 	V.width = innerWidth;
 	window.__spView = V;
 	window.__spViewer();

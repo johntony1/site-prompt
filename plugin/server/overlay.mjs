@@ -182,6 +182,7 @@ export function overlay() {
 			store.set('__spN', String(n));
 			el.setAttribute('data-sp-pick', String(p.n));
 			picks.push(p);
+			grab(p);
 			hint.style.opacity = '0';
 			status.hidden = true;
 			setArea(false);
@@ -208,6 +209,7 @@ export function overlay() {
 			store.set('__spN', String(n));
 			cur.setAttribute('data-sp-pick', String(p.n));
 			picks.push(p);
+			grab(p);
 			hint.style.opacity = '0';
 			status.hidden = true;
 			redraw();
@@ -221,12 +223,29 @@ export function overlay() {
 			if (picking && !open && e.key === 'ArrowUp' && cur?.parentElement && cur.parentElement !== document.body) { e.preventDefault(); down.push(cur); cur = cur.parentElement; show(); }
 			if (picking && !open && e.key === 'ArrowDown' && down.length) { e.preventDefault(); cur = down.pop(); show(); }
 		}, true);
+		// the pick as it is the moment they click: a menu open on hover closes when the pointer goes to the note card
+		const grab = (p) => {
+			const box = p.el.getBoundingClientRect();
+			p.at = { w: box.width, h: box.height };
+			p.pre = new Promise((r) => requestAnimationFrame(r)).then(() => window.__spInstant?.(p.el, '', p.area, false)).catch(() => null);
+		};
+		// still showing as it was when picked? (not faded, hidden, collapsed or resized since)
+		const same = (p) => {
+			const b = p.el.getBoundingClientRect();
+			if (!p.at || b.width < 2 || b.height < 2) return false;
+			if (Math.abs(b.width - p.at.w) > Math.max(4, p.at.w * 0.1) || Math.abs(b.height - p.at.h) > Math.max(4, p.at.h * 0.1)) return false;
+			let op = 1;
+			for (let x = p.el; x && x !== document.documentElement; x = x.parentElement) { const c = getComputedStyle(x); if (c.display === 'none' || c.visibility === 'hidden') return false; op *= parseFloat(c.opacity) || 0; }
+			if (op < 0.5) return false;
+			const t = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+			return !t || p.el.contains(t) || t.contains(p.el) || !!t.closest?.('site-prompt-ui');
+		};
 		const send = async (a) => {
 			closePop();
 			if (!picks.length) return;
 			// Break it down: taken apart right here, at once, from what is on screen; the agent builds the lesson after
 			let inst = null;
-			if (a === 'learn') { const p0 = picks.find((p) => document.contains(p.el)); try { inst = p0 && await window.__spInstant?.(p0.el, `${p0.kind === 'area' ? 'Area' : NAME[p0.kind]}, ${location.host.replace(/^www\./, '')}`, p0.area); if (inst) inst.n = p0.n; } catch (e) { inst = null; } }
+			if (a === 'learn') { const p0 = picks.find((p) => document.contains(p.el)); try { const pre = p0 && await p0.pre; const title = p0 && `${p0.kind === 'area' ? 'Area' : NAME[p0.kind]}, ${location.host.replace(/^www\./, '')}`; inst = p0 && await window.__spInstant?.(p0.el, title, p0.area, true, pre && !same(p0) ? pre : null); if (inst) inst.n = p0.n; } catch (e) { inst = null; } }
 			const batch = picks.filter((p) => document.contains(p.el)).map((p) => ({ n: p.n, kind: p.kind, label: p.label, note: p.note, area: p.area }));
 			picks.length = 0;
 			redraw();

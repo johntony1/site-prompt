@@ -37,6 +37,16 @@ await wait(1800);
 const lay = await page.eval(`(() => { const r = document.querySelector('site-prompt-view').shadowRoot; const sp = r.querySelector('.copy span'); const cs = getComputedStyle(sp); const cv = [...r.querySelectorAll('.copy canvas')]; const drawn = cv.some((k) => { try { return k.getContext('2d').getImageData(0, 0, k.width, k.height).data.some((v) => v > 0); } catch { return false; } }); return { font: cs.fontFamily, h: Math.round(sp.getBoundingClientRect().height / parseFloat(cs.lineHeight === 'normal' ? cs.fontSize : cs.lineHeight)), drawn }; })()`);
 check(/Georgia/.test(lay.font), 'the copy keeps the page font (the view styles do not leak in)', lay.font);
 check(lay.drawn, 'the canvas pixels are drawn in the view', lay);
+// a menu open on hover, picked, then closed by the time Break it down is pressed: the view shows it open, as clicked
+await page.eval('window.__spViewClose?.()'); await wait(1300);
+const html3 = `<body style="margin:0;font-family:Helvetica"><nav style="padding:20px"><button>Developers</button><div id="m" style="position:absolute;top:60px;left:20px;width:480px;padding:24px;border-radius:12px;background:#fff;box-shadow:0 8px 30px rgba(0,0,0,.15);transition:opacity .15s"><h3 style="margin:0">Guides</h3><p>Learn, create, innovate</p><h3>Tools</h3><p>Our resources</p></div></nav></body>`;
+await page.send('Page.navigate', { url: 'data:text/html,' + encodeURIComponent(html3) }); await wait(600);
+await page.eval(`window.__spTheme = ${JSON.stringify(THEME)}; window.__spIcons = ${JSON.stringify(ICONS)}; window.__spKit = (${spKit})(); window.__spSnap = ${snapshot}; window.__spViewer = ${viewer}; window.__spInstant = ${instant};`);
+const r3 = await page.eval(`(async () => { const m = document.getElementById('m'); const pre = await window.__spInstant(m, '', null, false); m.style.opacity = '0'; m.style.visibility = 'hidden'; const x = await window.__spInstant(m, 'Menu', null, true, pre); return { from: x.fromClick, layers: x.layers.map((l) => l.name) }; })()`);
+await wait(1800);
+const shown = await page.eval(`(() => { const r = document.querySelector('site-prompt-view').shadowRoot; const h = [...r.querySelectorAll('.copy h3')].find((e) => getComputedStyle(e).visibility === 'visible'); if (!h) return null; let op = 1; for (let x = h; x; x = x.parentElement) op *= parseFloat(getComputedStyle(x).opacity); const b = h.getBoundingClientRect(); return { text: h.textContent, op: Math.round(op * 100) / 100, w: Math.round(b.width) }; })()`);
+check(r3.from && r3.layers.some((n) => /Guides/.test(n)), 'a menu that closed after it was picked breaks down as it was when clicked', r3);
+check(shown && shown.op > 0.9 && shown.w > 10, 'and the view shows it open, not the closed menu', shown);
 close();
 console.log(failures ? `\n${failures} failed` : '\nall passed');
 process.exit(failures ? 1 : 0);
