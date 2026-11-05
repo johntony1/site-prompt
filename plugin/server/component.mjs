@@ -133,7 +133,8 @@ export function snapshot(sel) {
 			d = d.map((x) => {
 				const m = x.match(/^(width|height):([\d.]+)px$/);
 				if (!m) return x;
-				const exact = m[1] === 'width' ? bx.width : bx.height;
+				// on Chrome's layout grid (1/64 px), so a scaled ancestor's float noise (39.99997) reads 40
+				const exact = Math.round((m[1] === 'width' ? bx.width : bx.height) * 64) / 64;
 				return Math.abs(exact - parseFloat(m[2])) < 0.01 ? `${m[1]}:${exact}px` : x;
 			});
 		}
