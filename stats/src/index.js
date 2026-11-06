@@ -59,20 +59,29 @@ async function stats(env, ctx) {
 	])
 	const into = {}
 	for (const r of installsInto) for (const a of String(r.agent ?? '').split(',').filter(Boolean)) into[a] = (into[a] ?? 0) + 1
-	const github = await githubStats(ctx).catch(() => null)
+	const github = await githubStats(ctx, env).catch(() => null)
 	return { at: now, totals, active7: active7.n ?? 0, active30: active30.n ?? 0, daily, installedInto: Object.entries(into).sort((a, b) => b[1] - a[1]), inUse, tools, os, versions, countries, recent, github }
 }
 
-async function githubStats(ctx) {
+async function githubStats(ctx, env) {
 	const cache = caches.default
-	const key = new Request('https://cache.local/gh-site-prompt')
-	const hit = await cache.match(key)
+	const key = new Request('https://cache.local/gh-site-prompt-v2')
+	const hit = await cache.match(key).catch(() => null)
 	if (hit) return hit.json()
-	const r = await fetch('https://api.github.com/repos/johntony1/site-prompt', { headers: { 'user-agent': 'site-prompt-stats', accept: 'application/vnd.github+json' } })
-	if (!r.ok) return null
-	const j = await r.json()
-	const out = { stars: j.stargazers_count, forks: j.forks_count, watchers: j.subscribers_count, issues: j.open_issues_count }
-	ctx.waitUntil(cache.put(key, new Response(JSON.stringify(out), { headers: { 'cache-control': 'max-age=600' } })))
+	let out = null
+	if (env.GH_TOKEN) {
+		// with a read-only token: the repo's numbers and GitHub's 14-day traffic (clones include plugin installs)
+		const gh = (p) => fetch('https://api.github.com/repos/johntony1/site-prompt' + p, { headers: { authorization: `Bearer ${env.GH_TOKEN}`, 'user-agent': 'site-prompt-stats', accept: 'application/vnd.github+json' } }).then((r) => (r.ok ? r.json() : null))
+		const [repo, clones, views] = await Promise.all([gh(''), gh('/traffic/clones'), gh('/traffic/views')])
+		if (repo) out = { stars: repo.stargazers_count, forks: repo.forks_count, watchers: repo.subscribers_count, clones: clones?.count, cloners: clones?.uniques, views: views?.count, visitors: views?.uniques }
+	}
+	if (!out) {
+		// without one: GitHub limits anonymous API calls per IP and Cloudflare's IPs are shared, so ask shields.io
+		const sh = (p) => fetch(`https://img.shields.io/github/${p}/johntony1/site-prompt.json`, { headers: { 'user-agent': 'site-prompt-stats' } }).then((r) => (r.ok ? r.json() : null)).then((j) => (j ? Number(String(j.value).replace(/[^\d.k]/g, '').replace(/k$/, '000')) : null)).catch(() => null)
+		const [stars, forks, watchers] = await Promise.all([sh('stars'), sh('forks'), sh('watchers')])
+		if (stars != null) out = { stars, forks: forks ?? 0, watchers: watchers ?? 0 }
+	}
+	if (out) ctx.waitUntil(cache.put(key, new Response(JSON.stringify(out), { headers: { 'cache-control': 'max-age=600' } })))
 	return out
 }
 
@@ -141,6 +150,7 @@ ${tile('Active, 7 days', d.active7, `${d.active30} in 30 days`)}
 ${tile('Installs', t.installs ?? 0, `${t.first_runs ?? 0} plugin first runs`)}
 ${tile('Tool calls', t.tool_calls ?? 0, `${t.uninstalls ?? 0} uninstalls`)}
 ${d.github ? tile('GitHub stars', d.github.stars, `${d.github.forks} forks · ${d.github.watchers} watching`) : ''}
+${d.github?.clones != null ? tile('Clones, 14 days', d.github.clones, `${d.github.cloners} unique · ${d.github.visitors} visitors`) : ''}
 </div>
 <div class="grid">
 <div class="card wide"><h2>New machines, last 30 days</h2><div class="chart">${days.map((x) => `<i class="${x.n ? '' : 'z'}" title="${fmtDay(x.day)}: ${x.n}" style="height:${x.n ? Math.max(4, (x.n / maxDay) * 100) : 2}%"></i>`).join('')}</div><div class="axis"><span>${fmtDay(days[0].day)}</span><span>today</span></div></div>

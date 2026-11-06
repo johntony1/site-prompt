@@ -128,7 +128,7 @@ const AGENTS = [
 			// an extension: the server and the skill as its context file, in one folder
 			const dir = path.join(HOME, '.gemini', 'extensions', NAME);
 			if (UNINSTALL) { if (!DRY) rmSync(dir, { recursive: true, force: true }); return dir; }
-			write(path.join(dir, 'gemini-extension.json'), JSON.stringify({ name: NAME, version: '0.2.0', contextFileName: 'GEMINI.md', mcpServers: { [NAME]: { ...stdio(), timeout: 600000 } } }, null, 2) + '\n');
+			write(path.join(dir, 'gemini-extension.json'), JSON.stringify({ name: NAME, version: '0.2.1', contextFileName: 'GEMINI.md', mcpServers: { [NAME]: { ...stdio(), timeout: 600000 } } }, null, 2) + '\n');
 			write(path.join(dir, 'GEMINI.md'), SKILL.replace(/^---[\s\S]*?---\n/, ''));
 			return `${dir} (extension)`;
 		},
@@ -212,7 +212,7 @@ for (const d of done) console.log('  ✓ ' + d);
 if (skipped.length) console.log(`  not found, skipped: ${skipped.join(', ')}`);
 for (const m of manual) console.log('  ! ' + m);
 if (!DRY && doneIds.length) {
-	await track(UNINSTALL ? 'uninstall' : 'install', { agents: doneIds }, '0.2.0');
+	await track(UNINSTALL ? 'uninstall' : 'install', { agents: doneIds }, '0.2.1');
 	if (!UNINSTALL && !telemetryOff()) console.log('\nSite Prompt counts installs and tool use anonymously (no URLs, no content). Off: SITE_PROMPT_TELEMETRY=0');
 }
 if (!UNINSTALL) {

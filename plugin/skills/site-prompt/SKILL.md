@@ -4,7 +4,7 @@ description: "Turn any website, or any part of one, into a build prompt precise 
 license: MIT
 compatibility: Any coding agent with the site-prompt MCP server (Claude Code, Codex, Cursor, Gemini CLI, Grok CLI, Windsurf, VS Code, opencode, Zed). Node 22+ and Google Chrome (or Chromium, Edge, Brave).
 metadata:
-  version: "0.2.0"
+  version: "0.2.1"
 ---
 
 # site-prompt

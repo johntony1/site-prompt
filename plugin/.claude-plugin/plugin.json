@@ -1,7 +1,7 @@
 {
 	"name": "site-prompt",
 	"displayName": "Site Prompt",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"description": "Paste any website and get a prompt that rebuilds it 1:1, measured from the live page: layout, type, colours, depth, copy, hover and scroll motion, and the stack it was built with. Click any component to clone it exactly. Compare the rebuild with the original.",
 	"license": "MIT",
 	"keywords": [

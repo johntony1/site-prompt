@@ -19,7 +19,7 @@ import { fileTokens, findSource } from './place.mjs';
 import { breakdown, lessonOf, viewOf } from './breakdown.mjs';
 import { match } from './match.mjs';
 
-const VERSION = '0.2.0';
+const VERSION = '0.2.1';
 // everything lands in the person's Documents, one folder per site (the prompt with its reference files beside it)
 const base = () => process.env.SITE_PROMPT_OUT || path.join(os.homedir(), 'Documents', 'Site Prompts');
 const slug = (u) => {
