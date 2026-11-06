@@ -20,7 +20,15 @@ export default {
 		}
 		if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/api')) {
 			if (!env.DASH_KEY || url.searchParams.get('key') !== env.DASH_KEY) return new Response('Not found', { status: 404 })
+			// ?refresh=1: skip the caches and save GitHub's traffic now (instead of waiting for the daily run)
+			let note = null
+			if (url.searchParams.get('refresh') === '1') {
+				await caches.default.delete(new Request('https://cache.local/gh-site-prompt-v2')).catch(() => {})
+				await caches.default.delete(new Request('https://cache.local/npm-site-prompt')).catch(() => {})
+				note = await saveTraffic(env).then((r) => r, (e) => String(e?.message ?? e))
+			}
 			const data = await stats(env, ctx)
+			data.refresh = note
 			if (url.pathname === '/api') return Response.json(data)
 			return new Response(page(data, url.searchParams.get('key')), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } })
 		}
@@ -34,15 +42,18 @@ export default {
 }
 
 async function saveTraffic(env) {
-	if (!env.GH_TOKEN) return
-	const gh = (p) => fetch('https://api.github.com/repos/johntony1/site-prompt/traffic/' + p, { headers: { authorization: `Bearer ${env.GH_TOKEN}`, 'user-agent': 'site-prompt-stats', accept: 'application/vnd.github+json' } }).then((r) => (r.ok ? r.json() : null))
+	if (!env.GH_TOKEN) return 'no GH_TOKEN set'
+	let why = ''
+	const gh = (p) => fetch('https://api.github.com/repos/johntony1/site-prompt/traffic/' + p, { headers: { authorization: `Bearer ${env.GH_TOKEN.trim()}`, 'user-agent': 'site-prompt-stats', accept: 'application/vnd.github+json' } }).then(async (r) => { if (r.ok) return r.json(); why = `${r.status} ${((await r.json().catch(() => ({}))).message ?? '').slice(0, 120)}`; return null })
 	const [clones, views] = await Promise.all([gh('clones'), gh('views')])
+	if (!clones && !views) return `GitHub refused the token: ${why}`
 	const days = new Map()
 	for (const c of clones?.clones ?? []) days.set(c.timestamp.slice(0, 10), { ...(days.get(c.timestamp.slice(0, 10)) ?? {}), clones: c.count, cloners: c.uniques })
 	for (const v of views?.views ?? []) days.set(v.timestamp.slice(0, 10), { ...(days.get(v.timestamp.slice(0, 10)) ?? {}), views: v.count, visitors: v.uniques })
 	const stmt = env.DB.prepare('INSERT INTO gh_traffic (day, clones, cloners, views, visitors) VALUES (?, ?, ?, ?, ?) ON CONFLICT(day) DO UPDATE SET clones = excluded.clones, cloners = excluded.cloners, views = excluded.views, visitors = excluded.visitors')
 	const rows = [...days].map(([day, d]) => stmt.bind(day, d.clones ?? 0, d.cloners ?? 0, d.views ?? 0, d.visitors ?? 0))
 	if (rows.length) await env.DB.batch(rows)
+	return `saved ${rows.length} days`
 }
 
 async function ingest(req, env, fromPage) {
@@ -196,7 +207,7 @@ td:last-child{text-align:right;color:var(--faint)}
 .wide{grid-column:1/-1}
 footer{margin-top:20px;font-size:12px;color:var(--faint)}
 </style></head><body><main>
-<header><h1>Site Prompt</h1><span>updated ${new Date(d.at).toUTCString().replace(' GMT', ' UTC')} · <a href="?key=${esc(key)}" style="color:var(--muted)">refresh</a></span></header>
+<header><h1>Site Prompt</h1><span>updated ${new Date(d.at).toUTCString().replace(' GMT', ' UTC')}${d.refresh ? ` · ${esc(d.refresh)}` : ''} · <a href="?key=${esc(key)}&refresh=1" style="color:var(--muted)">refresh</a></span></header>
 <div class="tiles">
 ${tile('Machines', t.machines ?? 0, 'that installed or ran it')}
 ${tile('Active, 7 days', d.active7, `${d.active30} in 30 days`)}
