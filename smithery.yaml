@@ -1,0 +1,22 @@
+# Smithery: how to run site-prompt as a local stdio server
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      waitSeconds:
+        type: number
+        description: Seconds pick mode waits inside one tool call (default 240). Keep it below your client's tool timeout.
+      telemetry:
+        type: boolean
+        default: true
+        description: Anonymous usage counts (no URLs, no page content). Turn off with false.
+  commandFunction: |-
+    (config) => ({
+      command: 'npx',
+      args: ['-y', 'site-prompt@latest'],
+      env: {
+        ...(config.waitSeconds ? { SITE_PROMPT_WAIT: String(config.waitSeconds) } : {}),
+        ...(config.telemetry === false ? { SITE_PROMPT_TELEMETRY: '0' } : {}),
+      },
+    })

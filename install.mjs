@@ -75,7 +75,13 @@ function skillTo(dir) {
 	if (UNINSTALL) { if (!DRY) rmSync(path.join(dir, NAME), { recursive: true, force: true }); return; }
 	write(path.join(dir, NAME, 'SKILL.md'), SKILL);
 }
-const stdio = (wait) => ({ command: NODE, args: [SERVER], ...(wait ? { env: { SITE_PROMPT_WAIT: String(wait) } } : {}) });
+// how agents start it: from npm (`npx site-prompt install`: always the latest version), or the copy made above
+const VIA_NPX = process.env.SITE_PROMPT_VIA_NPX === '1';
+const NPX = (() => { try { const p = execFileSync(WIN ? 'where' : 'which', ['npx'], { encoding: 'utf8' }).split(/\r?\n/)[0].trim(); if (p) return p; } catch {} return 'npx'; })();
+const CMD = VIA_NPX ? NPX : NODE;
+const ARGS = VIA_NPX ? ['-y', 'site-prompt@latest'] : [SERVER];
+const RUN = [CMD, ...ARGS].join(' ');
+const stdio = (wait) => ({ command: CMD, args: ARGS, ...(wait ? { env: { SITE_PROMPT_WAIT: String(wait) } } : {}) });
 
 // each agent: where it keeps MCP servers, and how long it lets a tool call run (site_pick waits while you pick)
 const AGENTS = [
@@ -84,8 +90,8 @@ const AGENTS = [
 		run() {
 			if (has('claude') && !DRY) {
 				try { execFileSync('claude', ['mcp', 'remove', '--scope', 'user', NAME], { stdio: 'ignore' }); } catch {}
-				if (!UNINSTALL) execFileSync('claude', ['mcp', 'add', '--scope', 'user', NAME, '--', NODE, SERVER], { stdio: 'ignore' });
-			} else if (!has('claude')) manual.push('Claude Code: claude mcp add --scope user site-prompt -- node ' + SERVER);
+				if (!UNINSTALL) execFileSync('claude', ['mcp', 'add', '--scope', 'user', NAME, '--', CMD, ...ARGS], { stdio: 'ignore' });
+			} else if (!has('claude')) manual.push('Claude Code: claude mcp add --scope user site-prompt -- ' + RUN);
 			const extra = `\n## When called as /site-prompt\n\n$ARGUMENTS is the link (and maybe what to do). A link alone: run the whole-page flow above and finish with site_prompt. "pick", "hover", "component" or a named part (button, illustration, text, section): pick mode with site_pick (in a project, the toolbar can add picks straight to it). Two links: site_compare.\n`;
 			if (UNINSTALL) skillTo(path.join(HOME, '.claude', 'skills'));
 			else write(path.join(HOME, '.claude', 'skills', NAME, 'SKILL.md'), SKILL + extra);
@@ -106,7 +112,7 @@ const AGENTS = [
 				if (!skip) kept.push(line);
 			}
 			let text = kept.join('\n').replace(/\n+$/, '\n');
-			if (!UNINSTALL) text += `\n[mcp_servers.site-prompt]\ncommand = ${JSON.stringify(NODE)}\nargs = [${JSON.stringify(SERVER)}]\nstartup_timeout_sec = 20\ntool_timeout_sec = 600\n`;
+			if (!UNINSTALL) text += `\n[mcp_servers.site-prompt]\ncommand = ${JSON.stringify(CMD)}\nargs = [${ARGS.map((a) => JSON.stringify(a)).join(', ')}]\nstartup_timeout_sec = ${VIA_NPX ? 60 : 20}\ntool_timeout_sec = 600\n`;
 			write(conf, text);
 			skillTo(path.join(HOME, '.agents', 'skills'));
 			return `${conf} ([mcp_servers.site-prompt]) + ~/.agents/skills/site-prompt`;
@@ -138,7 +144,7 @@ const AGENTS = [
 		run() {
 			const file = path.join(HOME, '.grok', 'user-settings.json');
 			const ok = editJson(file, (d) => { d.mcpServers ??= {}; if (UNINSTALL) delete d.mcpServers[NAME]; else d.mcpServers[NAME] = { name: NAME, transport: 'stdio', ...stdio(50) }; });
-			if (!ok) return manual.push(`Grok CLI: grok mcp add site-prompt --transport stdio --command node --args ${SERVER}`), null;
+			if (!ok) return manual.push(`Grok CLI: grok mcp add site-prompt --transport stdio --command ${CMD} --args ${ARGS.join(' ')}`), null;
 			return file;
 		},
 	},
@@ -173,8 +179,8 @@ const AGENTS = [
 		id: 'opencode', name: 'opencode', found: () => has('opencode') || existsSync(path.join(HOME, '.config', 'opencode')),
 		run() {
 			const file = path.join(HOME, '.config', 'opencode', 'opencode.json');
-			const ok = editJson(file, (d) => { d.$schema ??= 'https://opencode.ai/config.json'; d.mcp ??= {}; if (UNINSTALL) delete d.mcp[NAME]; else d.mcp[NAME] = { type: 'local', command: [NODE, SERVER], enabled: true, environment: { SITE_PROMPT_WAIT: '50' } }; });
-			if (!ok) return manual.push(`opencode: add to ${file} under mcp: ${JSON.stringify({ [NAME]: { type: 'local', command: ['node', SERVER], enabled: true } })}`), null;
+			const ok = editJson(file, (d) => { d.$schema ??= 'https://opencode.ai/config.json'; d.mcp ??= {}; if (UNINSTALL) delete d.mcp[NAME]; else d.mcp[NAME] = { type: 'local', command: [CMD, ...ARGS], enabled: true, environment: { SITE_PROMPT_WAIT: '50' } }; });
+			if (!ok) return manual.push(`opencode: add to ${file} under mcp: ${JSON.stringify({ [NAME]: { type: 'local', command: [CMD, ...ARGS], enabled: true } })}`), null;
 			skillTo(path.join(HOME, '.config', 'opencode', 'skills'));
 			return `${file} + ~/.config/opencode/skills/site-prompt`;
 		},
@@ -191,7 +197,7 @@ const AGENTS = [
 ];
 
 // the copy every agent points at
-if (!UNINSTALL && !DRY) {
+if (!UNINSTALL && !DRY && !VIA_NPX) {
 	rmSync(APP + '.new', { recursive: true, force: true });
 	mkdirSync(APP + '.new', { recursive: true });
 	cpSync(path.join(here, 'plugin'), APP + '.new', { recursive: true });
@@ -207,7 +213,7 @@ for (const a of AGENTS) {
 }
 if (UNINSTALL && !DRY && !ONLY.length) rmSync(APP, { recursive: true, force: true });
 
-console.log(`${DRY ? 'Would ' + (UNINSTALL ? 'remove' : 'install') : UNINSTALL ? 'Removed' : 'Installed'} Site Prompt${UNINSTALL ? '' : ` (${APP})`}:`);
+console.log(`${DRY ? 'Would ' + (UNINSTALL ? 'remove' : 'install') : UNINSTALL ? 'Removed' : 'Installed'} Site Prompt${UNINSTALL ? '' : VIA_NPX ? ' (runs from npm, always the latest)' : ` (${APP})`}:`);
 for (const d of done) console.log('  ✓ ' + d);
 if (skipped.length) console.log(`  not found, skipped: ${skipped.join(', ')}`);
 for (const m of manual) console.log('  ! ' + m);
@@ -217,5 +223,5 @@ if (!DRY && doneIds.length) {
 }
 if (!UNINSTALL) {
 	console.log('\nRestart the agent, then ask it: "pick from https://linear.app" (or /site-prompt pick <link> in Claude Code).');
-	console.log('Any other MCP client: run  node ' + SERVER + '  as a stdio server.');
+	console.log('Any other MCP client: run  ' + RUN + '  as a stdio server.');
 }

@@ -9,7 +9,9 @@ nothing else to install.
 
 ## Install
 
-    git clone https://github.com/johntony1/site-prompt && node site-prompt/install.mjs
+    npx site-prompt install
+
+(or from GitHub: `git clone https://github.com/johntony1/site-prompt && node site-prompt/install.mjs`)
 
 It finds every agent on your machine and adds site-prompt to each one (the MCP server, and the skill where the agent
 reads skills). Only installed agents are touched, every file it edits is backed up first (`.bak`), and running it
@@ -30,11 +32,10 @@ Then restart your agent and ask: "pick from https://linear.app". In Claude Code:
 | opencode | `~/.config/opencode/opencode.json` + its skills folder |
 | Zed | `context_servers` in your settings (comments kept) |
 
-**Any other MCP client:** add a stdio server that runs `node ~/.site-prompt/app/server/server.mjs` (after running the
-installer once), for example:
+**Any other MCP client:** add a stdio server that runs `npx -y site-prompt@latest`, for example:
 
 ```json
-{ "mcpServers": { "site-prompt": { "command": "node", "args": ["/Users/you/.site-prompt/app/server/server.mjs"], "env": { "SITE_PROMPT_WAIT": "50" } } } }
+{ "mcpServers": { "site-prompt": { "command": "npx", "args": ["-y", "site-prompt@latest"], "env": { "SITE_PROMPT_WAIT": "50" } } } }
 ```
 
 `SITE_PROMPT_WAIT` is how long pick mode waits inside one tool call (default 240 s). Set it below your client's tool
@@ -136,7 +137,7 @@ images.
 ## What it counts
 
 Site Prompt sends anonymous counts so I can see how many people use it and in which agents: a random id made on your
-machine, the event (an install, a first run, a tool used), the tool's name and whether it worked, the agent's name,
+machine, the event (an install, a first run, a tool used, an install command copied on the project page), the tool's name and whether it worked, the agent's name,
 the version, your OS, and the country Cloudflare sees. Never URLs, page content, prompts, files or names. The code
 that receives it is in [`stats/`](stats/). Turn it off with `SITE_PROMPT_TELEMETRY=0` or `DO_NOT_TRACK=1`, or by
 creating `~/.site-prompt/no-telemetry`.

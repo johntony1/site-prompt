@@ -12,3 +12,10 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS events_ts ON events (ts);
 CREATE INDEX IF NOT EXISTS events_event ON events (event, ts);
+
+-- GitHub's clone and view counts, one row a day (GitHub keeps only 14 days; the daily cron keeps them all)
+CREATE TABLE IF NOT EXISTS gh_traffic (
+	day TEXT PRIMARY KEY,       -- 2026-11-06
+	clones INTEGER, cloners INTEGER, views INTEGER, visitors INTEGER
+);
+CREATE INDEX IF NOT EXISTS events_id ON events (id, ts);

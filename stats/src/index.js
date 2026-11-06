@@ -1,7 +1,8 @@
 // site-prompt's usage counter: anonymous events in (POST /e), a private dashboard out (GET /?key=…).
 // What is stored is exactly the columns in schema.sql: no URLs, no page content, no names, no IP addresses.
 
-const EVENTS = new Set(['install', 'uninstall', 'first_run', 'tool'])
+const EVENTS = new Set(['install', 'uninstall', 'first_run', 'tool', 'page_copy'])
+const PAGE_ORIGINS = new Set(['https://orevbajohn.me', 'https://www.orevbajohn.me'])
 const TOOLS = new Set(['site_read', 'site_prompt', 'site_pick', 'site_component', 'site_match', 'site_compare', 'break_down', 'add_to_project'])
 const clean = (v, max = 40) => (typeof v === 'string' ? v.replace(/[^\w.,:@/+ -]/g, '').slice(0, max) : null)
 const DAY = 86400000
@@ -9,7 +10,14 @@ const DAY = 86400000
 export default {
 	async fetch(req, env, ctx) {
 		const url = new URL(req.url)
-		if (req.method === 'POST' && url.pathname === '/e') return ingest(req, env)
+		const origin = req.headers.get('origin')
+		const cors = origin && PAGE_ORIGINS.has(origin) ? { 'access-control-allow-origin': origin, 'access-control-allow-methods': 'POST', 'access-control-allow-headers': 'content-type' } : {}
+		if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors })
+		if (req.method === 'POST' && url.pathname === '/e') {
+			const res = await ingest(req, env, !!cors['access-control-allow-origin'])
+			for (const [k, v] of Object.entries(cors)) res.headers.set(k, v)
+			return res
+		}
 		if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/api')) {
 			if (!env.DASH_KEY || url.searchParams.get('key') !== env.DASH_KEY) return new Response('Not found', { status: 404 })
 			const data = await stats(env, ctx)
@@ -18,15 +26,37 @@ export default {
 		}
 		return new Response('site-prompt stats', { status: 200 })
 	},
+
+	// once a day: GitHub's traffic for the last 14 days, kept for good (only with a GH_TOKEN secret)
+	async scheduled(_event, env, ctx) {
+		ctx.waitUntil(saveTraffic(env))
+	},
 }
 
-async function ingest(req, env) {
+async function saveTraffic(env) {
+	if (!env.GH_TOKEN) return
+	const gh = (p) => fetch('https://api.github.com/repos/johntony1/site-prompt/traffic/' + p, { headers: { authorization: `Bearer ${env.GH_TOKEN}`, 'user-agent': 'site-prompt-stats', accept: 'application/vnd.github+json' } }).then((r) => (r.ok ? r.json() : null))
+	const [clones, views] = await Promise.all([gh('clones'), gh('views')])
+	const days = new Map()
+	for (const c of clones?.clones ?? []) days.set(c.timestamp.slice(0, 10), { ...(days.get(c.timestamp.slice(0, 10)) ?? {}), clones: c.count, cloners: c.uniques })
+	for (const v of views?.views ?? []) days.set(v.timestamp.slice(0, 10), { ...(days.get(v.timestamp.slice(0, 10)) ?? {}), views: v.count, visitors: v.uniques })
+	const stmt = env.DB.prepare('INSERT INTO gh_traffic (day, clones, cloners, views, visitors) VALUES (?, ?, ?, ?, ?) ON CONFLICT(day) DO UPDATE SET clones = excluded.clones, cloners = excluded.cloners, views = excluded.views, visitors = excluded.visitors')
+	const rows = [...days].map(([day, d]) => stmt.bind(day, d.clones ?? 0, d.cloners ?? 0, d.views ?? 0, d.visitors ?? 0))
+	if (rows.length) await env.DB.batch(rows)
+}
+
+async function ingest(req, env, fromPage) {
 	const text = await req.text()
 	if (text.length > 2000) return new Response(null, { status: 413 })
 	let b
 	try { b = JSON.parse(text) } catch { return new Response(null, { status: 400 }) }
 	if (!EVENTS.has(b.event) || !/^[a-f0-9]{16,64}$/.test(b.id ?? '')) return new Response(null, { status: 400 })
-	const tool = b.event === 'tool' && TOOLS.has(b.tool) ? b.tool : null
+	// page events only from the case study, tool events only from the tool
+	if ((b.event === 'page_copy') !== fromPage) return new Response(null, { status: 400 })
+	// at most 60 events a minute from one id: nobody can pump the numbers
+	const recent = await env.DB.prepare('SELECT COUNT(*) AS n FROM events WHERE id = ? AND ts > ?').bind(b.id, Date.now() - 60000).first()
+	if ((recent?.n ?? 0) >= 60) return new Response(null, { status: 429 })
+	const tool = b.event === 'tool' && TOOLS.has(b.tool) ? b.tool : b.event === 'page_copy' ? clean(b.tool, 40) : null
 	if (b.event === 'tool' && !tool) return new Response(null, { status: 400 })
 	await env.DB.prepare('INSERT INTO events (ts, event, id, v, os, agent, tool, ok, country) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
 		.bind(Date.now(), b.event, b.id, clean(b.v, 16), clean(b.os, 12), clean(Array.isArray(b.agents) ? b.agents.join(',') : b.agent, 120), tool, b.ok === false ? 0 : 1, clean(req.cf?.country, 2))
@@ -57,10 +87,28 @@ async function stats(env, ctx) {
 		q(`SELECT country, COUNT(DISTINCT id) AS n FROM events WHERE country IS NOT NULL GROUP BY country ORDER BY n DESC LIMIT 12`),
 		q(`SELECT ts, event, agent, tool, os, country FROM events ORDER BY ts DESC LIMIT 20`),
 	])
+	const [traffic, copies, npm] = await Promise.all([
+		q(`SELECT day, clones, cloners, views, visitors FROM gh_traffic ORDER BY day DESC LIMIT 60`),
+		q(`SELECT tool AS tab, COUNT(*) AS n FROM events WHERE event = 'page_copy' AND ts > ? GROUP BY tool ORDER BY n DESC`, now - 30 * DAY),
+		npmDownloads(ctx),
+	])
 	const into = {}
 	for (const r of installsInto) for (const a of String(r.agent ?? '').split(',').filter(Boolean)) into[a] = (into[a] ?? 0) + 1
 	const github = await githubStats(ctx, env).catch(() => null)
-	return { at: now, totals, active7: active7.n ?? 0, active30: active30.n ?? 0, daily, installedInto: Object.entries(into).sort((a, b) => b[1] - a[1]), inUse, tools, os, versions, countries, recent, github }
+	return { at: now, traffic: traffic.reverse(), copies, npm, totals, active7: active7.n ?? 0, active30: active30.n ?? 0, daily, installedInto: Object.entries(into).sort((a, b) => b[1] - a[1]), inUse, tools, os, versions, countries, recent, github }
+}
+
+/** npm's public download counts for the last 30 days (none until the package is published) */
+async function npmDownloads(ctx) {
+	const cache = caches.default
+	const key = new Request('https://cache.local/npm-site-prompt')
+	const hit = await cache.match(key).catch(() => null)
+	if (hit) return hit.json()
+	const r = await fetch('https://api.npmjs.org/downloads/range/last-month/site-prompt').catch(() => null)
+	const j = r?.ok ? await r.json() : null
+	const out = j?.downloads ? { total: j.downloads.reduce((a, d) => a + d.downloads, 0), days: j.downloads.map((d) => ({ day: d.day, n: d.downloads })) } : null
+	if (out) ctx.waitUntil(cache.put(key, new Response(JSON.stringify(out), { headers: { 'cache-control': 'max-age=1800' } })))
+	return out
 }
 
 async function githubStats(ctx, env) {
@@ -95,6 +143,11 @@ function bars(rows, label, value, total) {
 	const max = Math.max(1, ...rows.map(value))
 	if (!rows.length) return '<p class="empty">Nothing yet.</p>'
 	return `<div class="bars">${rows.map((r) => `<div class="bar"><span class="bl">${esc(label(r))}</span><span class="track"><i style="width:${(value(r) / max) * 100}%"></i></span><b>${value(r)}${total ? `<em>${total(r)}</em>` : ''}</b></div>`).join('')}</div>`
+}
+
+function chart(points) {
+	const max = Math.max(1, ...points.map((p) => p.n))
+	return `<div class="chart">${points.map((p) => `<i class="${p.n ? '' : 'z'}" title="${esc(p.label)}: ${p.n}" style="height:${p.n ? Math.max(4, (p.n / max) * 100) : 2}%"></i>`).join('')}</div><div class="axis"><span>${esc(points[0]?.label ?? '')}</span><span>${esc(points[points.length - 1]?.label ?? '')}</span></div>`
 }
 
 function page(d, key) {
@@ -151,12 +204,17 @@ ${tile('Installs', t.installs ?? 0, `${t.first_runs ?? 0} plugin first runs`)}
 ${tile('Tool calls', t.tool_calls ?? 0, `${t.uninstalls ?? 0} uninstalls`)}
 ${d.github ? tile('GitHub stars', d.github.stars, `${d.github.forks} forks · ${d.github.watchers} watching`) : ''}
 ${d.github?.clones != null ? tile('Clones, 14 days', d.github.clones, `${d.github.cloners} unique · ${d.github.visitors} visitors`) : ''}
+${tile('npm downloads, 30 days', d.npm ? d.npm.total : '0', d.npm ? 'npx site-prompt' : 'not published yet')}
+${tile('Install copies, 30 days', d.copies.reduce((a, c) => a + c.n, 0), 'from orevbajohn.me/site-prompt')}
 </div>
 <div class="grid">
 <div class="card wide"><h2>New machines, last 30 days</h2><div class="chart">${days.map((x) => `<i class="${x.n ? '' : 'z'}" title="${fmtDay(x.day)}: ${x.n}" style="height:${x.n ? Math.max(4, (x.n / maxDay) * 100) : 2}%"></i>`).join('')}</div><div class="axis"><span>${fmtDay(days[0].day)}</span><span>today</span></div></div>
+${d.npm ? `<div class="card wide"><h2>npm downloads per day</h2>${chart(d.npm.days.map((x) => ({ label: x.day, n: x.n })))}</div>` : ''}
+${d.traffic.length ? `<div class="card wide"><h2>GitHub clones per day (views ${d.traffic.reduce((a, t) => a + t.views, 0)})</h2>${chart(d.traffic.map((x) => ({ label: x.day, n: x.clones })))}</div>` : ''}
 <div class="card"><h2>Installed into</h2>${bars(d.installedInto, (r) => nice(r[0]), (r) => r[1])}</div>
 <div class="card"><h2>Agents in use (machines · calls)</h2>${bars(d.inUse, (r) => nice(r.agent), (r) => r.machines, (r) => r.calls)}</div>
 <div class="card"><h2>Tools, last 30 days (calls · ok)</h2>${bars(d.tools, (r) => r.tool.replace(/^site_/, ''), (r) => r.n, (r) => `${Math.round((r.ok / Math.max(1, r.n)) * 100)}%`)}</div>
+<div class="card"><h2>Install box copies, by tab</h2>${bars(d.copies, (r) => r.tab ?? '?', (r) => r.n)}</div>
 <div class="card"><h2>Countries</h2>${bars(d.countries, (r) => r.country, (r) => r.n)}</div>
 <div class="card"><h2>Systems</h2>${bars(d.os, (r) => ({ darwin: 'macOS', linux: 'Linux', win32: 'Windows' })[r.os] ?? r.os ?? '?', (r) => r.n)}</div>
 <div class="card"><h2>Versions, last 30 days</h2>${bars(d.versions, (r) => r.v ?? '?', (r) => r.n)}</div>

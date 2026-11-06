@@ -6,3 +6,6 @@ compatibility_date = "2026-10-01"
 binding = "DB"
 database_name = "site-prompt-stats"
 database_id = "3d22190f-9c51-4525-8893-3327db7fdc5e"
+
+[triggers]
+crons = ["17 3 * * *"]

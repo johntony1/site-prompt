@@ -1,0 +1,36 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.johntony1/site-prompt",
+  "description": "Point at any part of a website and get a prompt that rebuilds it 1:1, or see how it is made.",
+  "repository": {
+    "url": "https://github.com/johntony1/site-prompt",
+    "source": "github",
+    "id": "1447206990"
+  },
+  "version": "0.2.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "site-prompt",
+      "version": "0.2.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "SITE_PROMPT_WAIT",
+          "description": "Seconds pick mode waits inside one tool call (default 240). Set it below your client's tool timeout.",
+          "isRequired": false,
+          "format": "number"
+        },
+        {
+          "name": "SITE_PROMPT_TELEMETRY",
+          "description": "Set to 0 to turn off anonymous usage counts.",
+          "isRequired": false,
+          "format": "string"
+        }
+      ]
+    }
+  ],
+  "websiteUrl": "https://orevbajohn.me/site-prompt"
+}
